@@ -1,0 +1,14 @@
+[
+  {
+    "id": "cpp_01_cacheline_ring_buffer",
+    "suite": "09_cpp_ring_buffer",
+    "title": "C++20 Cacheline-Aligned Atomic Ring Buffer",
+    "difficulty": "hard",
+    "category": "systems",
+    "language": "cpp",
+    "description": "Implement a C++20 zero-allocation bounded lock-free ring buffer with 64-byte cacheline isolation to prevent false sharing.",
+    "prompt": "You are an expert C++20 systems software engineer. Implement a bounded lock-free Single-Producer Single-Consumer (SPSC) ring buffer:\n\nRequirements:\n1. Define `template<typename T, size_t Capacity> class SpscRingBuffer`.\n2. Ensure head and tail atomic indexes are isolated with `alignas(64)` to eliminate false sharing.\n3. Method `bool push(const T& item)`: Stores item and returns true; returns false if full with `std::memory_order_release`.\n4. Method `bool pop(T& item)`: Loads item and returns true; returns false if empty with `std::memory_order_acquire`.\n5. Output ONLY the production class template in a markdown code block.",
+    "constraints": [],
+    "test_code": "#include <cassert>\n#include <iostream>\n\nint main() {\n    SpscRingBuffer<int, 4> buffer;\n    assert(buffer.push(10));\n    assert(buffer.push(20));\n    int val = 0;\n    assert(buffer.pop(val) && val == 10);\n    assert(buffer.pop(val) && val == 20);\n    assert(!buffer.pop(val));\n    std::cout << \"C++20 SPSC Ring Buffer Test Passed!\\n\";\n    return 0;\n}\n"
+  }
+]

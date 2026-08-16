@@ -1,0 +1,21 @@
+[
+  {
+    "id": "swift_02_custom_masonry_layout",
+    "suite": "04_swift_layout",
+    "title": "SwiftUI Custom Masonry Layout with Subview Caching",
+    "difficulty": "hard",
+    "category": "refactoring",
+    "language": "swift",
+    "description": "Implement a custom SwiftUI Flow/Masonry Layout protocol with horizontal row-wrapping, alignment, and spacing calculation.",
+    "prompt": "You are an expert Swift 6 and SwiftUI systems engineer. Implement a custom flow layout:\n\nRequirements:\n1. Define `struct FlowLayout: Layout` with `var horizontalSpacing: CGFloat = 8` and `var verticalSpacing: CGFloat = 8`.\n2. Implement `func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize`.\n3. Implement `func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ())`.\n4. When width exceeds `proposal.width`, wrap subviews onto the next row.\n5. Output ONLY the production struct inside a markdown block. DO NOT include example views or top-level scripts.",
+    "constraints": [
+      {
+        "name": "no_top_level",
+        "rule_type": "forbidden_pattern",
+        "value": "@main",
+        "description": "Must not define executable entrypoint."
+      }
+    ],
+    "test_code": "import SwiftUI\n\n@main\nstruct TestRunner {\n    static func main() {\n        let layout = FlowLayout(horizontalSpacing: 10, verticalSpacing: 10)\n        assert(layout.horizontalSpacing == 10)\n        assert(layout.verticalSpacing == 10)\n        println_test(\"SwiftUI FlowLayout Test Passed!\")\n    }\n}\n\nfunc println_test(_ msg: String) {\n    print(msg)\n}\n"
+  }
+]

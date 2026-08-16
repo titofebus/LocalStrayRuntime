@@ -1,0 +1,14 @@
+[
+  {
+    "id": "swift_03_multifile_actor_rpc",
+    "suite": "14_swift_multifile_rpc",
+    "title": "Swift 6 Multi-Module Actor-Isolated RPC Connection Pool",
+    "difficulty": "expert",
+    "category": "distributed",
+    "language": "swift",
+    "description": "Architect a modular Swift 6 actor-isolated RPC connection pool with request deduplication and failure recovery.",
+    "prompt": "You are a Principal Swift 6 Systems Architect. Implement a modular Swift 6 RPC network client:\n\nRequired Architecture & Files:\n1. `Messages.swift`:\n   - `struct RPCRequest: Sendable, Hashable { let id: String; let method: String; let payload: String }`\n   - `struct RPCResponse: Sendable { let id: String; let result: String; let isError: Bool }`\n2. `RPCClient.swift`:\n   - `actor RPCClient` with `init(maxConcurrent: Int)`\n   - `func send(request: RPCRequest, transport: @Sendable @escaping (RPCRequest) async throws -> RPCResponse) async throws -> RPCResponse`\n   - Single-flight deduplication: If a request with the same `id` is already in-flight, return the existing task result.\n\nFormat your response as clean modular Swift code or with `// FILE: Messages.swift`, `// FILE: RPCClient.swift`.",
+    "constraints": [],
+    "test_code": "import Foundation\n\n@main\nstruct TestMain {\n    static func main() async throws {\n        let client = RPCClient(maxConcurrent: 4)\n        \n        // Test deduplication\n        let req = RPCRequest(id: \"req-1\", method: \"getUser\", payload: \"uid=42\")\n        \n        var callCount = 0\n        let transport: @Sendable (RPCRequest) async throws -> RPCResponse = { r in\n            try await Task.sleep(nanoseconds: 30_000_000)\n            return RPCResponse(id: r.id, result: \"user-data\", isError: false)\n        }\n        \n        async let res1 = client.send(request: req, transport: transport)\n        async let res2 = client.send(request: req, transport: transport)\n        \n        let (r1, r2) = try await (res1, res2)\n        assert(r1.result == \"user-data\")\n        assert(r2.result == \"user-data\")\n        print(\"Swift 6 Multi-Module RPC Test Passed!\")\n    }\n}\n"
+  }
+]

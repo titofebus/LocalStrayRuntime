@@ -1,0 +1,21 @@
+[
+  {
+    "id": "rust_02_lockfree_spmc_ring_buffer",
+    "suite": "05_rust_atomics",
+    "title": "Rust Lock-Free SPMC Atomic Ring Buffer",
+    "difficulty": "hard",
+    "category": "systems",
+    "language": "rust",
+    "description": "Implement a bounded Single-Producer Multi-Consumer (SPMC) ring buffer using AtomicUsize and Acquire/Release memory ordering.",
+    "prompt": "You are an expert Rust systems engineer. Implement a lock-free Single-Producer Multi-Consumer (SPMC) ring buffer:\n\nRequirements:\n1. Define `pub struct SpmcRingBuffer<T>` with `pub fn new(capacity: usize) -> Self`.\n2. Implement `pub fn push(&self, item: T) -> Result<(), T>` using `AtomicUsize` with `Ordering::Release`.\n3. Implement `pub fn pop(&self) -> Option<T>` using `compare_exchange_weak` or `compare_exchange` with `Ordering::Acquire`.\n4. When buffer is full, `push` returns `Err(item)`.\n5. When buffer is empty, `pop` returns `None`.\n6. Output ONLY the production struct inside a markdown block. DO NOT write unit tests or main.",
+    "constraints": [
+      {
+        "name": "no_unsafe_arbitrary",
+        "rule_type": "forbidden_pattern",
+        "value": "unsafe fn",
+        "description": "Do not declare unsafe public functions."
+      }
+    ],
+    "test_code": "fn main() {\n    let buffer = SpmcRingBuffer::new(4);\n    assert!(buffer.push(10).is_ok());\n    assert!(buffer.push(20).is_ok());\n    assert_eq!(buffer.pop(), Some(10));\n    assert_eq!(buffer.pop(), Some(20));\n    assert_eq!(buffer.pop(), None);\n    println!(\"Rust SPMC Ring Buffer Test Passed!\");\n}\n"
+  }
+]

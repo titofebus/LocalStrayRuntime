@@ -1,0 +1,52 @@
+suite: "02_strict_system_refactoring"
+description: "Architectural design, streaming parsers, and event dispatch under strict negative constraints"
+
+challenges:
+  - id: "refactor_01_sse_stream_parser"
+    title: "Zero-Dependency Server-Sent Events (SSE) Stream Decoder"
+    difficulty: "hard"
+    category: "refactoring"
+    description: "Parse fragmented chunks of Server-Sent Events (SSE) stream into structured message events."
+    prompt: |
+      Write a Python class `SSEParser` that decodes streaming byte/string chunks conforming to the W3C Server-Sent Events specification.
+
+      Requirements:
+      1. `def feed(self, chunk: str) -> List[dict]`:
+         - Consumes arbitrary chunk strings that may split across lines or multi-byte boundaries.
+         - Returns a list of parsed events: `[{"event": str, "data": str, "id": Optional[str], "retry": Optional[int]}]`
+      2. Support multi-line `data:` fields (joined with `\n`).
+      3. Default `event` name is `"message"`.
+      4. Ignore comments (lines starting with `:`).
+      5. Events are dispatched upon encountering a double newline (`\n\n` or `\r\n\r\n`).
+
+      Constraints:
+      - Standard library only. No external packages.
+    constraints:
+      - name: "no_httpx_or_requests"
+        rule_type: "forbidden_import"
+        value: "httpx"
+        description: "Pure standard library string/byte parsing"
+    test_code: |
+      parser = SSEParser()
+
+      # Chunk 1: partial event
+      ev1 = parser.feed("id: 101\nevent: update\ndata: first line\n")
+      assert ev1 == [], f"Expected no event on incomplete chunk, got {ev1}"
+
+      # Chunk 2: completion with multi-line data
+      ev2 = parser.feed("data: second line\n\n")
+      assert len(ev2) == 1
+      assert ev2[0]["id"] == "101"
+      assert ev2[0]["event"] == "update"
+      assert ev2[0]["data"] == "first line\nsecond line"
+
+      # Chunk 3: multiple events in a single feed + comments
+      chunk3 = ": ping comment\nevent: done\ndata: payload\n\n: another comment\ndata: default_event\n\n"
+      ev3 = parser.feed(chunk3)
+      assert len(ev3) == 2
+      assert ev3[0]["event"] == "done"
+      assert ev3[0]["data"] == "payload"
+      assert ev3[1]["event"] == "message"
+      assert ev3[1]["data"] == "default_event"
+
+      print("ALL SSE PARSER TESTS PASSED")

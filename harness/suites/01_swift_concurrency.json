@@ -1,0 +1,27 @@
+[
+  {
+    "id": "swift_01_actor_coalescing_cache",
+    "suite": "01_swift_concurrency",
+    "title": "Swift 6 Actor-Isolated Task Coalescing Async Cache",
+    "difficulty": "hard",
+    "category": "concurrency",
+    "language": "swift",
+    "description": "Implement a generic Swift 6 actor-isolated AsyncCache<Key: Hashable & Sendable, Value: Sendable> that coalesces in-flight tasks to prevent thundering herd requests, propagates errors to all awaiting callers, and supports TTL-based expiration.",
+    "prompt": "You are a senior Swift 6 systems engineer. Implement a thread-safe, actor-isolated async cache with in-flight task coalescing (single-flight):\n\nRequirements:\n1. Define `actor AsyncCache<Key: Hashable & Sendable, Value: Sendable>`.\n2. Method `func get(key: Key, ttlSeconds: TimeInterval = 60, loader: @Sendable @escaping () async throws -> Value) async throws -> Value`.\n3. If multiple concurrent callers request the same key while a fetch is in progress, only 1 loader invocation must execute; all other callers must await the same underlying Swift Task.\n4. If the loader throws an error, the error must be propagated to all awaiting callers, and the failed task must be immediately removed from the in-flight map so subsequent calls can retry.\n5. Cache successful values up to `ttlSeconds`.\n6. Provide full Sendable compliance and no data races.",
+    "constraints": [
+      {
+        "name": "actor_isolation",
+        "rule_type": "exact_schema",
+        "value": "actor AsyncCache",
+        "description": "Must declare an actor named AsyncCache."
+      },
+      {
+        "name": "sendable_conformance",
+        "rule_type": "forbidden_pattern",
+        "value": "nonisolated(unsafe)",
+        "description": "Must not use nonisolated(unsafe) shortcuts."
+      }
+    ],
+    "test_code": "import Foundation\nimport os\n\n@main\nstruct TestRunner {\n    static func main() async throws {\n        let cache = AsyncCache<String, String>()\n        let loaderCount = OSAllocatedUnfairLock(initialState: 0)\n        \n        // Test 1: 20 concurrent callers coalescing to 1 fetch\n        try await withThrowingTaskGroup(of: String.self) { group in\n            for _ in 0..<20 {\n                group.addTask {\n                    try await cache.get(key: \"user_123\", ttlSeconds: 10) {\n                        loaderCount.withLock { $0 += 1 }\n                        try await Task.sleep(nanoseconds: 50_000_000)\n                        return \"Alice\"\n                    }\n                }\n            }\n            for try await val in group {\n                assert(val == \"Alice\", \"Returned incorrect value: \\(val)\")\n            }\n        }\n        \n        let invocations = loaderCount.withLock { $0 }\n        assert(invocations == 1, \"Expected 1 loader invocation due to coalescing, got \\(invocations)\")\n        print(\"Swift AsyncCache Test Passed! 20 callers -> 1 invocation.\")\n    }\n}\n"
+  }
+]

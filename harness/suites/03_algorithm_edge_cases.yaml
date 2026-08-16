@@ -1,0 +1,46 @@
+suite: "03_algorithm_edge_cases"
+description: "Algorithmic puzzles with subtle edge cases, cycle detection, and boundary conditions"
+
+challenges:
+  - id: "algo_01_topological_cycle_resolver"
+    title: "Dependency Graph Cycle Breaker with Lexicographical Tie-breaking"
+    difficulty: "hard"
+    category: "reasoning"
+    description: "Detect cycles in directed graph and return minimum lexicographically smallest edges to remove."
+    prompt: |
+      Write a function `resolve_dependency_cycles(dependencies: dict[str, list[str]]) -> list[tuple[str, str]]`:
+
+      Where `dependencies` maps a node to a list of its outgoing targets (edges `u -> v`).
+
+      Requirements:
+      1. Detect if the graph has any directed cycles.
+      2. If cycles exist, identify the minimum set of edges `(u, v)` to remove so the resulting graph is a valid Directed Acyclic Graph (DAG).
+      3. If multiple edge cuts resolve the cycle with the same count, tie-break by choosing the edge that is lexicographically smallest `(u, v)`.
+      4. If the graph is already a DAG, return `[]`.
+      5. Return edges sorted lexicographically.
+    constraints:
+      - name: "pure_python"
+        rule_type: "forbidden_import"
+        value: "networkx"
+        description: "Must implement graph traversal without external graph libraries"
+    test_code: |
+      # Test 1: Simple DAG
+      dag = {"A": ["B"], "B": ["C"], "C": []}
+      assert resolve_dependency_cycles(dag) == []
+
+      # Test 2: Simple 3-cycle A -> B -> C -> A
+      cycle_3 = {"A": ["B"], "B": ["C"], "C": ["A"]}
+      cut = resolve_dependency_cycles(cycle_3)
+      assert cut == [("A", "B")], f"Expected [('A', 'B')], got {cut}"
+
+      # Test 3: Disconnected components with cycles
+      multi = {
+          "A": ["B"], "B": ["A"],
+          "X": ["Y"], "Y": ["Z"], "Z": ["X"]
+      }
+      cut_multi = resolve_dependency_cycles(multi)
+      assert len(cut_multi) == 2
+      assert ("A", "B") in cut_multi
+      assert ("X", "Y") in cut_multi
+
+      print("ALL GRAPH CYCLE TESTS PASSED")

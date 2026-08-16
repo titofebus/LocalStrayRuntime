@@ -1,0 +1,86 @@
+[project]
+name = "qwen-prime-runtime"
+version = "0.1.0"
+description = "Local Qwen3.8-27B MLX runtime with native-MTP speculative decoding"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "dflash-mlx==0.1.8",
+    "mlx==0.32.0",
+    "mlx-lm==0.31.3",
+    "rich>=13.7.0",
+    "pydantic>=2.7.0",
+    "pyyaml>=6.0.1",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+training = ["numpy>=2.0.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["harness"]
+exclude = [
+    "harness/agent/**",
+    "harness/trainer/**",
+    "harness/web/**",
+    "harness/cli.py",
+    "harness/test_step1.py",
+    "harness/run_tournament_*.py",
+    "harness/core/ast_engine.py",
+    "harness/core/constraints.py",
+    "harness/core/recorder.py",
+    "harness/core/sandbox.py",
+    "harness/core/speculative_tree.py",
+    "harness/core/suites.py",
+    "harness/daemon/client.py",
+    "harness/daemon/openai_server.py",
+    "harness/daemon/server.py",
+    "harness/executors/mlx_engine.py",
+    "harness/executors/speculative_engine.py",
+    "harness/executors/transcript_bridge.py",
+    "harness/suites/**",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/LICENSE",
+    "/README.md",
+    "/THIRD_PARTY_NOTICES.md",
+    "/docs/RELEASE.md",
+    "/pyproject.toml",
+    "/uv.lock",
+    "/harness/__init__.py",
+    "/harness/config.py",
+    "/harness/dflash_runtime.py",
+    "/harness/model_provenance.py",
+    "/harness/mtp_artifact.py",
+    "/harness/release_metadata.py",
+    "/harness/runtime_cli.py",
+    "/harness/core/models.py",
+    "/harness/daemon/qwen_chat.py",
+    "/harness/daemon/stream_stats.py",
+    "/harness/daemon/unified_server.py",
+    "/harness/executors/dflash_engine.py",
+    "/harness/executors/qwen38_mtp.py",
+    "/harness/trainer/README.md",
+    "/harness/trainer/export_qwen38_mtp.py",
+    "/scripts/*.command",
+    "/tests/test_dflash_engine_config.py",
+    "/tests/test_model_provenance.py",
+    "/tests/test_mtp_artifact.py",
+    "/tests/test_qwen38_mtp.py",
+    "/tests/test_qwen_chat_format.py",
+    "/tests/test_qwen_prime_runtime_identity.py",
+    "/tests/test_runtime_cli.py",
+    "/tests/test_stream_stats.py",
+]
+
+[project.scripts]
+qwen-prime-runtime = "harness.runtime_cli:main"

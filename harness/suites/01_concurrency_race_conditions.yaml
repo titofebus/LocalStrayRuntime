@@ -1,0 +1,117 @@
+suite: "01_concurrency_race_conditions"
+description: "Real-world async concurrency, deadlock prevention, and race condition tests"
+
+challenges:
+  - id: "concurrency_01_thundering_herd"
+    title: "Async Cache with Stampede / Thundering Herd Prevention"
+    difficulty: "hard"
+    category: "concurrency"
+    description: "Build an async cached loader that ensures when 100 concurrent coroutines request the same uncached key, the loader is called exactly ONCE."
+    prompt: |
+      Write an async Python class `AsyncSingleFlightCache` that provides memoized asynchronous loading.
+
+      Requirements:
+      1. Signature: `async def get(self, key: str, loader_coro_fn) -> Any`
+      2. If multiple concurrent tasks call `get()` for the same uncached key simultaneously, `loader_coro_fn(key)` must only be invoked ONCE (preventing thundering herd / cache stampede).
+      3. All waiting callers must receive the exact result once computed.
+      4. If the loader fails / raises an exception, the error must propagate to all waiting callers, and future calls should be allowed to retry.
+      5. Include a `clear(key=None)` method.
+
+      Provide pure Python code within a ```python ... ``` block.
+    constraints:
+      - name: "no_third_party"
+        rule_type: "forbidden_import"
+        value: "redis"
+        description: "Must use standard library asyncio only"
+    test_code: |
+      import asyncio
+      import pytest
+
+      async def test_thundering_herd():
+          cache = AsyncSingleFlightCache()
+          load_count = 0
+
+          async def slow_loader(key):
+              nonlocal load_count
+              load_count += 1
+              await asyncio.sleep(0.05)
+              return f"value_for_{key}"
+
+          # Launch 50 concurrent requests for the same key
+          tasks = [cache.get("user:123", slow_loader) for _ in range(50)]
+          results = await asyncio.gather(*tasks)
+
+          assert len(results) == 50
+          assert all(r == "value_for_user:123" for r in results)
+          assert load_count == 1, f"Expected loader to run 1 time, ran {load_count} times"
+
+      async def test_error_propagation_and_retry():
+          cache = AsyncSingleFlightCache()
+          attempt = 0
+
+          async def failing_loader(key):
+              nonlocal attempt
+              attempt += 1
+              await asyncio.sleep(0.02)
+              if attempt == 1:
+                  raise ValueError("Database timeout")
+              return "recovered_val"
+
+          # First wave fails
+          tasks = [cache.get("fail_key", failing_loader) for _ in range(10)]
+          res = await asyncio.gather(*tasks, return_exceptions=True)
+          assert all(isinstance(r, ValueError) for r in res)
+          assert attempt == 1
+
+          # Subsequent call should retry and succeed
+          val = await cache.get("fail_key", failing_loader)
+          assert val == "recovered_val"
+          assert attempt == 2
+
+      asyncio.run(test_thundering_herd())
+      asyncio.run(test_error_propagation_and_retry())
+      print("ALL CONCURRENCY TESTS PASSED")
+
+  - id: "concurrency_02_lock_free_token_bucket"
+    title: "Thread-Safe Async Rate Limiter"
+    difficulty: "medium"
+    category: "concurrency"
+    description: "High-throughput token bucket rate limiter with burst capability and non-blocking probe."
+    prompt: |
+      Write an async Python class `AsyncTokenBucket` with:
+      - `__init__(self, rate: float, capacity: float)` where `rate` is tokens added per second, `capacity` is max bucket size.
+      - `async def acquire(self, tokens: float = 1.0) -> None`: sleeps if insufficient tokens are available until tokens are replenished, then consumes them.
+      - `def try_acquire(self, tokens: float = 1.0) -> bool`: non-blocking check that returns True and consumes tokens if available, False otherwise.
+
+      Requirements:
+      - Use `asyncio.get_event_loop().time()` or `time.monotonic()` for precision.
+      - Must handle high concurrent burst without race conditions.
+    constraints:
+      - name: "std_lib_only"
+        rule_type: "forbidden_import"
+        value: "limits"
+        description: "Use standard asyncio/time"
+    test_code: |
+      import asyncio
+      import time
+
+      async def test_bucket():
+          bucket = AsyncTokenBucket(rate=100.0, capacity=10.0)
+
+          # Bucket starts full
+          assert bucket.try_acquire(5.0) is True
+          assert bucket.try_acquire(5.0) is True
+          assert bucket.try_acquire(1.0) is False  # Empty now
+
+          # Sleep 0.05s -> adds ~5 tokens
+          await asyncio.sleep(0.06)
+          assert bucket.try_acquire(5.0) is True
+
+          # Acquire with wait
+          t0 = time.monotonic()
+          await bucket.acquire(10.0) # Needs ~0.1s to accumulate 10 tokens
+          elapsed = time.monotonic() - t0
+          assert elapsed >= 0.08, f"Should have waited ~0.1s, waited {elapsed:.3f}s"
+
+      asyncio.run(test_bucket())
+      print("ALL TOKEN BUCKET TESTS PASSED")

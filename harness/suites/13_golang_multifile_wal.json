@@ -1,0 +1,14 @@
+[
+  {
+    "id": "go_02_multifile_raft_wal",
+    "suite": "13_golang_multifile_wal",
+    "title": "Go Multi-Module Raft Write-Ahead-Log & Compaction Storage",
+    "difficulty": "expert",
+    "category": "distributed",
+    "language": "go",
+    "description": "Implement a modular Go storage engine managing write-ahead logging with CRC32 checksums and snapshot compaction.",
+    "prompt": "You are a Distributed Systems Engineer. Implement a modular Raft Storage Engine in Go:\n\nRequired Architecture:\n1. `LogEntry`: `struct { Index uint64; Term uint64; Data []byte; Checksum uint32 }`\n2. `Snapshot`: `struct { LastIndex uint64; LastTerm uint64; State []byte }`\n3. `StorageEngine`: `struct` with methods:\n   - `NewStorageEngine() *StorageEngine`\n   - `AppendLog(entry LogEntry) error` (Computes CRC32 with crc32.ChecksumIEEE)\n   - `ReadLog(index uint64) (*LogEntry, error)` (Validates CRC32 checksum)\n   - `ApplySnapshot(snap Snapshot) error` (Discards logs <= snap.LastIndex)\n   - `CompactLogs(uptoIndex uint64) error` (Discards logs <= uptoIndex)\n4. Thread-safe with `sync.RWMutex`.\n5. Output ONLY the Go code in a single markdown block.",
+    "constraints": [],
+    "test_code": "import (\n    \"bytes\"\n    \"fmt\"\n)\n\nfunc main() {\n    engine := NewStorageEngine()\n\n    // Append logs\n    for i := uint64(1); i <= 5; i++ {\n        err := engine.AppendLog(LogEntry{\n            Index: i,\n            Term:  1,\n            Data:  []byte(fmt.Sprintf(\"cmd-%d\", i)),\n        })\n        if err != nil {\n            panic(err)\n        }\n    }\n\n    entry, err := engine.ReadLog(3)\n    if err != nil || !bytes.Equal(entry.Data, []byte(\"cmd-3\")) {\n        panic(\"failed to read log entry 3\")\n    }\n\n    // Apply snapshot and compact\n    err = engine.ApplySnapshot(Snapshot{\n        LastIndex: 3,\n        LastTerm:  1,\n        State:     []byte(\"snapshot-state\"),\n    })\n    if err != nil {\n        panic(err)\n    }\n\n    println(\"Go Multi-Module Raft WAL Test Passed!\")\n}\n"
+  }
+]

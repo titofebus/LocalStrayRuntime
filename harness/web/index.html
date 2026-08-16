@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local Qwen3.8-27B vs Claude 4.6 Opus Arena</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent-qwen: #58a6ff;
+      --accent-opus: #d2a8ff;
+      --success: #3fb950;
+      --error: #f85149;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'Fira Code', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+      padding: 24px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header h1 { font-size: 1.5rem; font-weight: 700; }
+    .header .subtitle { color: var(--text-muted); font-size: 0.875rem; }
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .stat-card .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-card .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+    .qwen-text { color: var(--accent-qwen); }
+    .opus-text { color: var(--accent-opus); }
+    .grid-container {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 24px;
+    }
+    .sidebar {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      height: calc(100vh - 220px);
+      overflow-y: auto;
+    }
+    .sidebar h2 { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 12px; }
+    .challenge-item {
+      padding: 10px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 8px;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .challenge-item:hover { background: rgba(255,255,255,0.05); }
+    .challenge-item.active { background: rgba(88, 166, 255, 0.1); border-color: var(--accent-qwen); }
+    .challenge-title { font-weight: 600; font-size: 0.875rem; }
+    .challenge-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+    .main-view {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      height: calc(100vh - 220px);
+      overflow-y: auto;
+    }
+    .prompt-box {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      margin-bottom: 24px;
+      font-size: 0.9rem;
+    }
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .model-pane {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    .model-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-pass { background: rgba(63, 185, 80, 0.2); color: var(--success); }
+    .badge-fail { background: rgba(248, 81, 73, 0.2); color: var(--error); }
+    .code-block {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      background: #000;
+      padding: 12px;
+      border-radius: 4px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      flex-grow: 1;
+      max-height: 400px;
+    }
+    .think-toggle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      margin-top: 8px;
+      text-decoration: underline;
+    }
+    .think-box {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      background: rgba(255,255,255,0.03);
+      padding: 8px;
+      border-radius: 4px;
+      margin-top: 6px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>Local Qwen3.8-27B vs Claude 4.6 Opus</h1>
+      <div class="subtitle">Deterministic Engineering Evaluation & Unit Test Sandbox</div>
+    </div>
+    <div>
+      <span class="badge" style="background: rgba(88,166,255,0.15); color: var(--accent-qwen);">M4 Max Studio (36GB RAM)</span>
+    </div>
+  </div>
+
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card">
+      <div class="label">Evaluated Challenges</div>
+      <div class="value" id="statTotal">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Qwen3.8 Test Pass Rate</div>
+      <div class="value qwen-text" id="statQwenPass">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Opus 4.6 Test Pass Rate</div>
+      <div class="value opus-text" id="statOpusPass">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Qwen Avg Throughput</div>
+      <div class="value qwen-text" id="statQwenSpeed">-</div>
+    </div>
+  </div>
+
+  <div class="grid-container">
+    <div class="sidebar">
+      <h2>Challenges</h2>
+      <div id="challengeList">Loading challenges...</div>
+    </div>
+
+    <div class="main-view" id="mainView">
+      <div style="color: var(--text-muted); text-align: center; margin-top: 100px;">
+        Select a challenge on the left to inspect side-by-side code solutions and test results.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let challenges = [];
+    let results = [];
+
+    async function loadData() {
+      try {
+        const [cRes, rRes, lRes] = await Promise.all([
+          fetch('/api/challenges'),
+          fetch('/api/results'),
+          fetch('/api/leaderboard')
+        ]);
+        challenges = await cRes.json();
+        results = await rRes.json();
+        const leaderboard = await lRes.json();
+
+        // Update stats
+        document.getElementById('statTotal').innerText = leaderboard.total_challenges_evaluated;
+        document.getElementById('statQwenPass').innerText = leaderboard.qwen.pass_rate;
+        document.getElementById('statOpusPass').innerText = leaderboard.opus.pass_rate;
+        document.getElementById('statQwenSpeed').innerText = `${leaderboard.qwen.avg_tokens_per_sec} tok/s`;
+
+        renderChallengeList();
+      } catch (err) {
+        console.error("Failed to load data:", err);
+      }
+    }
+
+    function renderChallengeList() {
+      const listEl = document.getElementById('challengeList');
+      listEl.innerHTML = '';
+      challenges.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'challenge-item';
+        item.innerHTML = `
+          <div class="challenge-title">${c.title}</div>
+          <div class="challenge-meta">${c.id} • ${c.difficulty.toUpperCase()}</div>
+        `;
+        item.onclick = () => selectChallenge(c);
+        listEl.appendChild(item);
+      });
+      if (challenges.length > 0) {
+        selectChallenge(challenges[0]);
+      }
+    }
+
+    function selectChallenge(c) {
+      document.querySelectorAll('.challenge-item').forEach(el => el.classList.remove('active'));
+      // Find matching result
+      const run = results.find(r => r.challenge_id === c.id);
+
+      const main = document.getElementById('mainView');
+      main.innerHTML = `
+        <h2 style="margin-bottom: 8px;">${c.title}</h2>
+        <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 16px;">
+          Suite: <code>${c.suite}</code> | Category: <strong>${c.category}</strong> | Difficulty: <strong>${c.difficulty.toUpperCase()}</strong>
+        </div>
+        <div class="prompt-box">
+          <strong>Challenge Description:</strong><br>${c.description}<br><br>
+          <strong>Prompt:</strong><br><pre style="white-space: pre-wrap; font-family: var(--font-mono); font-size: 0.8rem; margin-top: 8px;">${c.prompt}</pre>
+        </div>
+        <div class="comparison-grid">
+          <div class="model-pane">
+            <div class="model-header">
+              <strong class="qwen-text">Qwen3.8-27B (Local 6-bit)</strong>
+              ${run ? `<span class="badge ${run.qwen_verification.test_passed ? 'badge-pass' : 'badge-fail'}">${run.qwen_verification.test_passed ? 'TESTS PASSED' : 'TESTS FAILED'}</span>` : '<span class="badge">NOT RUN</span>'}
+            </div>
+            ${run ? `
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">
+                Speed: ${run.qwen_output.tokens_per_sec.toFixed(1)} tok/s | Memory: ${run.qwen_output.peak_memory_gb ? run.qwen_output.peak_memory_gb.toFixed(1) + ' GB' : '-'} | Time: ${run.qwen_verification.execution_time_seconds}s
+              </div>
+              <div class="code-block">${run.qwen_output.code_content || run.qwen_output.raw_response}</div>
+              ${run.qwen_output.thinking_content ? `
+                <div class="think-toggle" onclick="toggleThink('qwenThink')">Toggle Reasoning Trace (<think>)</div>
+                <div class="think-box" id="qwenThink">${run.qwen_output.thinking_content}</div>
+              ` : ''}
+              <div style="margin-top: 12px; font-size: 0.75rem;">
+                <strong>Sandbox Output:</strong>
+                <pre style="background: #000; padding: 6px; border-radius: 4px; margin-top: 4px;">${run.qwen_verification.test_output}</pre>
+              </div>
+            ` : '<div style="color: var(--text-muted);">Run <code>harness challenge ' + c.id + '</code> in CLI to evaluate.</div>'}
+          </div>
+
+          <div class="model-pane">
+            <div class="model-header">
+              <strong class="opus-text">Claude 4.6 Opus (Frontier)</strong>
+              ${run && run.opus_verification ? `<span class="badge ${run.opus_verification.test_passed ? 'badge-pass' : 'badge-fail'}">${run.opus_verification.test_passed ? 'TESTS PASSED' : 'TESTS FAILED'}</span>` : '<span class="badge">PENDING</span>'}
+            </div>
+            ${run && run.opus_output ? `
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">
+                Runtime: ${run.opus_verification ? run.opus_verification.execution_time_seconds + 's' : '-'}
+              </div>
+              <div class="code-block">${run.opus_output.code_content || run.opus_output.raw_response}</div>
+              <div style="margin-top: 12px; font-size: 0.75rem;">
+                <strong>Sandbox Output:</strong>
+                <pre style="background: #000; padding: 6px; border-radius: 4px; margin-top: 4px;">${run.opus_verification.test_output}</pre>
+              </div>
+            ` : '<div style="color: var(--text-muted);">Awaiting Opus completion from your dedicated window.</div>'}
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleThink(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.style.display = el.style.display === 'block' ? 'none' : 'block';
+      }
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

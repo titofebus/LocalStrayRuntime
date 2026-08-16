@@ -1,0 +1,72 @@
+suite: "05_long_context_reasoning"
+description: "Cross-file codebase synthesis, state invariant tracking, and architectural diagnosis"
+
+challenges:
+  - id: "context_01_cross_module_leak"
+    title: "Cross-Module Circular Event Leak Diagnostics"
+    difficulty: "expert"
+    category: "long_context"
+    description: "Trace multi-file subscription cycles that prevent garbage collection in long-running services."
+    prompt: |
+      Below are simulated source code definitions from three interconnected modules (`session_manager.py`, `metrics_collector.py`, `event_bus.py`).
+
+      ```python
+      # event_bus.py
+      class EventBus:
+          def __init__(self):
+              self._subscribers = {}
+          def subscribe(self, event_type: str, callback):
+              self._subscribers.setdefault(event_type, []).append(callback)
+          def emit(self, event_type: str, *args, **kwargs):
+              for cb in self._subscribers.get(event_type, []):
+                  cb(*args, **kwargs)
+
+      # metrics_collector.py
+      class MetricsCollector:
+          def __init__(self, bus: EventBus):
+              self.bus = bus
+              self.events_seen = 0
+              self.bus.subscribe("session_end", self.on_session_end)
+          def on_session_end(self, session_id: str):
+              self.events_seen += 1
+
+      # session_manager.py
+      class UserSession:
+          def __init__(self, session_id: str, bus: EventBus):
+              self.session_id = session_id
+              self.bus = bus
+              self.bus.subscribe("tick", self._keep_alive)
+          def _keep_alive(self):
+              pass
+      ```
+
+      Problem: In `UserSession`, subscribing bound methods (`self._keep_alive`) creates strong references from the global `EventBus` to the `UserSession` instance, preventing Python's GC from collecting dead sessions when they go out of scope.
+
+      Write a refactored `WeakEventBus` class and `WeakUserSession` class that uses `weakref` to allow sessions to be garbage collected automatically when no external strong references remain.
+
+      Provide pure Python code in a ```python ... ``` block.
+    constraints:
+      - name: "use_weakref"
+        rule_type: "required_pattern"
+        value: r"weakref"
+        description: "Must use Python weakref module"
+    test_code: |
+      import gc
+      import weakref
+
+      bus = WeakEventBus()
+      session = WeakUserSession("sess_001", bus)
+      session_ref = weakref.ref(session)
+
+      # Emit works while session is alive
+      bus.emit("tick")
+
+      # Delete external reference and force GC
+      del session
+      gc.collect()
+
+      assert session_ref() is None, "UserSession was NOT garbage collected! EventBus retained strong reference."
+
+      # Emitting after deletion should not crash and should cleanly prune dead references
+      bus.emit("tick")
+      print("ALL WEAKREF GC LEAK TESTS PASSED")

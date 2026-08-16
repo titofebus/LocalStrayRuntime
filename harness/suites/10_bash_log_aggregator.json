@@ -1,0 +1,14 @@
+[
+  {
+    "id": "bash_01_streaming_log_aggregator",
+    "suite": "10_bash_log_aggregator",
+    "title": "Bash High-Performance Streaming Log Aggregator",
+    "difficulty": "medium",
+    "category": "cli",
+    "language": "bash",
+    "description": "Implement a high-throughput Bash pipeline that parses structured HTTP access logs from stdin, filters 5xx status codes, and outputs summary metrics.",
+    "prompt": "You are an expert Unix CLI systems engineer. Implement a Bash function `aggregate_logs()`:\n\nRequirements:\n1. Read log lines from stdin formatted as: `<timestamp> <status_code> <path> <latency_ms>`\n2. Output two lines:\n   - `5xx_COUNT=<total count of status codes >= 500>`\n   - `MAX_LATENCY=<maximum latency_ms seen>`\n3. Use `set -euo pipefail` and efficient `awk` processing.\n4. Output ONLY the bash script in a markdown block.",
+    "constraints": [],
+    "test_code": "set -euo pipefail\n\nLOG_DATA=\"2026-08-15 200 /api/v1/user 45\n2026-08-15 500 /api/v1/checkout 320\n2026-08-15 503 /api/v1/pay 1500\n2026-08-15 200 /api/v1/health 12\"\n\nOUTPUT=$(echo \"$LOG_DATA\" | aggregate_logs)\n\necho \"$OUTPUT\" | grep -q \"5xx_COUNT=2\" || exit 1\necho \"$OUTPUT\" | grep -q \"MAX_LATENCY=1500\" || exit 1\n\necho \"Bash Log Aggregator Test Passed!\"\n"
+  }
+]

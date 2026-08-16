@@ -1,0 +1,61 @@
+suite: "04_tool_schema_agentic"
+description: "Tool calling, strict JSON schema adherence, and multi-step agent planning"
+
+challenges:
+  - id: "agent_01_tool_call_dispatcher"
+    title: "Strict JSON Schema Function Dispatcher with Type Coercion"
+    difficulty: "medium"
+    category: "tool_use"
+    description: "Validate LLM tool calls against JSON schemas, coerce types where safe, and execute registered handlers."
+    prompt: |
+      Write a Python class `ToolDispatcher`:
+      - `def register(self, name: str, schema: dict, handler_fn)`: registers a tool name with its JSON schema and execution handler.
+      - `def dispatch(self, tool_call_json: str) -> dict`:
+         - Parses a JSON string formatted as `{"name": "...", "arguments": {...}}`.
+         - Validates required parameters against the registered schema.
+         - Coerces string numbers to integers/floats if schema requires `number`/`integer`.
+         - Calls `handler_fn(**arguments)` and returns `{"status": "success", "result": ...}`.
+         - If validation fails or tool not found, returns `{"status": "error", "message": "..."}` without crashing.
+    constraints:
+      - name: "safe_execution"
+        rule_type: "forbidden_pattern"
+        value: r"\beval\s*\("
+        description: "Do not use eval()"
+    test_code: |
+      import json
+
+      dispatcher = ToolDispatcher()
+
+      # Register calculator
+      calc_schema = {
+          "type": "object",
+          "properties": {
+              "a": {"type": "integer"},
+              "b": {"type": "integer"},
+              "op": {"type": "string", "enum": ["add", "multiply"]}
+          },
+          "required": ["a", "b", "op"]
+      }
+
+      def calc_handler(a, b, op):
+          return a + b if op == "add" else a * b
+
+      dispatcher.register("calculate", calc_schema, calc_handler)
+
+      # Test 1: Valid execution with string coercion
+      call1 = json.dumps({"name": "calculate", "arguments": {"a": "15", "b": 10, "op": "add"}})
+      res1 = dispatcher.dispatch(call1)
+      assert res1["status"] == "success"
+      assert res1["result"] == 25
+
+      # Test 2: Missing required parameter
+      call2 = json.dumps({"name": "calculate", "arguments": {"a": 15}})
+      res2 = dispatcher.dispatch(call2)
+      assert res2["status"] == "error"
+
+      # Test 3: Unknown tool
+      call3 = json.dumps({"name": "unknown_tool", "arguments": {}})
+      res3 = dispatcher.dispatch(call3)
+      assert res3["status"] == "error"
+
+      print("ALL TOOL DISPATCHER TESTS PASSED")

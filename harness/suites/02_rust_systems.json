@@ -1,0 +1,21 @@
+[
+  {
+    "id": "rust_01_tokio_stream_slicer",
+    "suite": "02_rust_systems",
+    "title": "Rust Tokio Zero-Copy Streaming Frame Parser",
+    "difficulty": "hard",
+    "category": "refactoring",
+    "language": "rust",
+    "description": "Implement a zero-copy binary frame parser in Rust that handles fragmented byte streams with length-prefixed headers, CRC32 checksum verification, and backpressure.",
+    "prompt": "You are an expert Rust systems engineer. Implement a streaming binary frame decoder:\n\nRequirements:\n1. Define `struct FrameDecoder` with `pub fn new() -> Self` and `pub fn decode(&mut self, src: &[u8]) -> Result<Vec<Frame>, FrameError>`.\n2. Each frame format:\n   - 2-byte Magic Header: `0xAA 0x55`\n   - 2-byte Big-Endian payload length `N` (maximum 65535 bytes)\n   - `N` bytes payload\n   - 4-byte Checksum (big-endian 32-bit checksum: computed as the sum of payload bytes `payload.iter().map(|&b| b as u32).sum()`, or standard CRC32)\n3. Handle partial/fragmented chunks across consecutive `decode()` invocations without memory reallocation or buffer bloat.\n4. If checksum is invalid, return `FrameError::ChecksumMismatch`.\n5. If magic header is invalid, return `FrameError::CorruptHeader`.",
+    "constraints": [
+      {
+        "name": "no_unsafe",
+        "rule_type": "forbidden_pattern",
+        "value": "unsafe {",
+        "description": "Must not use unsafe blocks."
+      }
+    ],
+    "test_code": "fn main() {\n    let mut decoder = FrameDecoder::new();\n    \n    // Construct valid frame for payload \"HELLO\"\n    let payload = b\"HELLO\";\n    let len = (payload.len() as u16).to_be_bytes();\n    \n    // Test with standard byte sum\n    let sum: u32 = payload.iter().map(|&b| b as u32).sum();\n    let mut frame_bytes = vec![0xAA, 0x55, len[0], len[1]];\n    frame_bytes.extend_from_slice(payload);\n    frame_bytes.extend_from_slice(&sum.to_be_bytes());\n    \n    // Test chunk splitting (split in half)\n    let chunk1 = &frame_bytes[..4];\n    let chunk2 = &frame_bytes[4..];\n    \n    let res1 = decoder.decode(chunk1).unwrap_or_else(|_| vec![]);\n    assert_eq!(res1.len(), 0, \"Expected 0 frames for partial chunk\");\n    \n    let res2 = decoder.decode(chunk2).expect(\"Failed chunk2 with standard checksum\");\n    assert_eq!(res2.len(), 1, \"Expected 1 frame decoded\");\n    assert_eq!(res2[0].payload, payload);\n    println!(\"Rust FrameDecoder Test Passed!\");\n}\n"
+  }
+]

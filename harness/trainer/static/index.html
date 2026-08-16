@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DFlash Qwen3.8-27B Distillation Utility</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand-icon">⚡</div>
+      <div>
+        <div class="brand-title">DFlash Distillation Utility</div>
+        <div class="brand-subtitle">Qwen3.8-27B · Apple Silicon M4 Max</div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div id="status-badge" class="status-badge idle">
+        <span class="status-dot"></span>
+        <span id="status-text">IDLE</span>
+      </div>
+      <button id="btn-start" class="btn btn-primary">Start Distillation</button>
+      <button id="btn-pause" class="btn btn-secondary" style="display: none;">Pause</button>
+      <button id="btn-reset" class="btn btn-danger">Reset</button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="app-container">
+
+    <!-- Action / Notification Banner -->
+    <div id="action-banner" class="action-banner" style="display: none;">
+      <div class="banner-content">
+        <h4 id="banner-title">Pipeline Ready</h4>
+        <p id="banner-desc">Ready to begin DFlash block diffusion drafter training on local Unified Memory.</p>
+      </div>
+    </div>
+
+    <!-- Overall Progress Card -->
+    <div class="overview-card">
+      <div class="overview-header">
+        <div class="overview-title">Overall Pipeline Progress</div>
+        <div id="overall-progress-pct" class="overview-pct">0.0%</div>
+      </div>
+      <div class="progress-track">
+        <div id="overall-progress-fill" class="progress-fill"></div>
+      </div>
+    </div>
+
+    <!-- Telemetry Metric Grid -->
+    <div class="telemetry-grid">
+      <div class="metric-card">
+        <div class="metric-label">Elapsed Time</div>
+        <div id="metric-elapsed" class="metric-value">0m 00s</div>
+        <div class="metric-sub">Active Compute Time</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Estimated Remaining</div>
+        <div id="metric-eta" class="metric-value">--</div>
+        <div class="metric-sub">Dynamic ETA</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Training Loss</div>
+        <div id="metric-loss" class="metric-value">--</div>
+        <div class="metric-sub">Cross-Entropy Residual</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Speculative Throughput</div>
+        <div id="metric-speed" class="metric-value">--</div>
+        <div class="metric-sub">Target: 45–60 tok/s</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Memory Footprint</div>
+        <div id="metric-memory" class="metric-value">0.0 GB</div>
+        <div class="metric-sub">Unified Memory Budget</div>
+      </div>
+    </div>
+
+    <!-- Step-by-Step Walkthrough Stepper -->
+    <section>
+      <div class="stepper-container" id="stages-list">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </section>
+
+    <!-- Live Execution Logs -->
+    <section>
+      <div class="overview-title" style="margin-bottom: 8px;">Real-Time Execution Telemetry</div>
+      <div class="terminal-card" id="terminal-logs">
+        <div class="log-line">[System] DFlash Training Orchestrator initialized. Ready to begin.</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <div>SSD Storage: <span style="color: var(--text-primary);">/Volumes/Studio Storage/LLMs/Qwen3.8-27B-DFlash-Local</span></div>
+    <div>Crash-Safe Checkpointing: <span style="color: var(--accent-success);">Active</span></div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

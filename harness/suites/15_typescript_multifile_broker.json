@@ -1,0 +1,14 @@
+[
+  {
+    "id": "ts_03_multifile_event_broker",
+    "suite": "15_typescript_multifile_broker",
+    "title": "TypeScript Multi-Module Reactive Event Broker & Replay Engine",
+    "difficulty": "expert",
+    "category": "systems",
+    "language": "typescript",
+    "description": "Architect a modular TypeScript reactive event broker with wildcard topic subscriptions and in-memory replay buffer.",
+    "prompt": "You are a Principal TypeScript Architect. Implement a modular event broker and replay engine in TypeScript:\n\nRequired Architecture & Files:\n1. `types.ts`:\n   - `interface EventEnvelope<T = unknown> { id: string; topic: string; timestamp: number; payload: T }`\n   - `type EventHandler<T = unknown> = (event: EventEnvelope<T>) => void | Promise<void>`\n2. `broker.ts`:\n   - `class EventBroker` with `subscribe(topicPattern: string, handler: EventHandler)` and `publish(event: EventEnvelope)`\n   - Wildcard matching: `orders.*` matches `orders.created` and `orders.fulfilled`.\n3. `replay.ts`:\n   - `class ReplayBuffer` with `record(event: EventEnvelope)` and `replay(topicPattern: string): EventEnvelope[]`\n\nFormat your response as clean modular code with `// FILE: types.ts`, `// FILE: broker.ts`, `// FILE: replay.ts` or a unified export module.",
+    "constraints": [],
+    "test_code": "const broker = new EventBroker();\nconst replay = new ReplayBuffer();\n\nconst received: string[] = [];\nbroker.subscribe(\"user.*\", (ev) => {\n    received.push(ev.id);\n    replay.record(ev);\n});\n\nbroker.publish({ id: \"e1\", topic: \"user.created\", timestamp: Date.now(), payload: { uid: 1 } });\nbroker.publish({ id: \"e2\", topic: \"user.updated\", timestamp: Date.now(), payload: { uid: 1 } });\nbroker.publish({ id: \"e3\", topic: \"order.created\", timestamp: Date.now(), payload: { oid: 99 } });\n\nif (received.length !== 2 || received[0] !== \"e1\" || received[1] !== \"e2\") {\n    throw new Error(\"Event routing failed: \" + JSON.stringify(received));\n}\n\nconst history = replay.replay(\"user.*\");\nif (history.length !== 2) {\n    throw new Error(\"Replay buffer failed: \" + JSON.stringify(history));\n}\n\nconsole.log(\"TypeScript Multi-Module Event Broker Test Passed!\");\n"
+  }
+]

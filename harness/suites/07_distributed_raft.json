@@ -1,0 +1,14 @@
+[
+  {
+    "id": "algo_02_raft_election_state_machine",
+    "suite": "07_distributed_raft",
+    "title": "Raft Leader Election State Machine",
+    "difficulty": "hard",
+    "category": "distributed",
+    "language": "python",
+    "description": "Implement a deterministic Raft election state machine with term increments, majority quorum calculation, and role transitions.",
+    "prompt": "You are a distributed systems architect. Implement a deterministic Raft election state machine:\n\nRequirements:\n1. Define `class RaftNode` with `__init__(self, node_id: str, cluster_nodes: list[str])`.\n2. Attributes: `self.node_id`, `self.current_term` (int, default 0), `self.state` ('FOLLOWER', 'CANDIDATE', 'LEADER'), `self.voted_for` (Optional[str]).\n3. Method `handle_election_timeout() -> dict`: If not LEADER, increment `current_term`, set `state = 'CANDIDATE'`, vote for self, and return `{'type': 'REQUEST_VOTE', 'term': self.current_term, 'candidate_id': self.node_id}`.\n4. Method `handle_request_vote(term: int, candidate_id: str) -> bool`: If `term > self.current_term`, update `current_term = term`, set `state = 'FOLLOWER'`, and reset `voted_for = None`. Grant vote (return True and set `voted_for = candidate_id`) only if `term == self.current_term` and `self.voted_for in (None, candidate_id)`.\n5. Method `handle_vote_response(term: int, granted: bool) -> None`: If `state == 'CANDIDATE'` and `term == self.current_term` and `granted`, increment vote count. If votes > len(cluster_nodes) // 2, transition `state = 'LEADER'`.\n6. Output ONLY the production class inside a single markdown block.",
+    "constraints": [],
+    "test_code": "nodes = [\"node1\", \"node2\", \"node3\"]\nnode = RaftNode(\"node1\", nodes)\nassert node.state == \"FOLLOWER\"\nassert node.current_term == 0\n\n# 1. Trigger election timeout\nreq = node.handle_election_timeout()\nassert node.state == \"CANDIDATE\"\nassert node.current_term == 1\nassert req[\"candidate_id\"] == \"node1\"\n\n# 2. Receive 1 vote from node2 -> majority (2/3)\nnode.handle_vote_response(1, True)\nassert node.state == \"LEADER\"\n\n# 3. Higher term discovered from node3 -> step down to follower\ngranted = node.handle_request_vote(2, \"node3\")\nassert node.state == \"FOLLOWER\"\nassert node.current_term == 2\nassert granted is True\n\nprint(\"Raft Election State Machine Test Passed!\")\n"
+  }
+]

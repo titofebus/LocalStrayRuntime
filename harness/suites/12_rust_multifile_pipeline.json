@@ -1,0 +1,14 @@
+[
+  {
+    "id": "rust_03_multifile_event_pipeline",
+    "suite": "12_rust_multifile_pipeline",
+    "title": "Rust Multi-Module Async Event Processing Pipeline",
+    "difficulty": "expert",
+    "category": "systems",
+    "language": "rust",
+    "description": "Architect a modular event pipeline with types, worker pool, and atomic telemetry recorder using stdlib concurrency.",
+    "prompt": "You are a Principal Rust Systems Architect. Implement a high-performance event processing pipeline in Rust 2021 using standard library concurrency:\n\nRequired Architecture:\n1. `enum EventPayload { Text(String), Binary(Vec<u8>) }` with `Debug, Clone, PartialEq`\n2. `struct Event { pub id: u64, pub topic: String, pub payload: EventPayload }`\n3. `struct PipelineMetrics` with `AtomicU64` fields `processed_count` and `error_count`.\n4. `struct EventPipeline` with:\n   - `pub fn new(workers: usize, buffer_size: usize) -> Self`\n   - `pub fn submit(&self, event: Event) -> Result<(), &'static str>`\n   - `pub fn start<F>(&self, handler: F) where F: Fn(Event) -> Result<(), &'static str> + Send + Sync + 'static`\n   - `pub fn metrics(&self) -> &PipelineMetrics`\n5. Use `std::sync::mpsc::sync_channel` and `std::thread::spawn`.\n6. Output ONLY the Rust code in a markdown block.",
+    "constraints": [],
+    "test_code": "fn main() {\n    let pipeline = EventPipeline::new(4, 16);\n    pipeline.start(|ev| {\n        if ev.topic == \"error\" {\n            Err(\"simulated error\")\n        } else {\n            Ok(())\n        }\n    });\n\n    for i in 0..10 {\n        let topic = if i % 3 == 0 { \"error\" } else { \"orders\" };\n        let _ = pipeline.submit(Event {\n            id: i,\n            topic: topic.to_string(),\n            payload: EventPayload::Text(format!(\"event-{}\", i)),\n        });\n    }\n\n    std::thread::sleep(std::time::Duration::from_millis(50));\n    let m = pipeline.metrics();\n    assert!(m.processed_count.load(std::sync::atomic::Ordering::SeqCst) > 0);\n    println!(\"Rust Multi-Module Pipeline Test Passed!\");\n}\n"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "arch_01_distributed_rate_limiter",
+    "suite": "11_architecture_rate_limiter",
+    "title": "Distributed Sliding Window Log Rate Limiter",
+    "difficulty": "hard",
+    "category": "architecture",
+    "language": "python",
+    "description": "Implement a distributed sliding window rate limiter state machine with timestamp pruning, burst allowance, and atomic capacity checks.",
+    "prompt": "You are a Cloud Systems Architect. Implement a distributed sliding window rate limiter in Python:\n\nRequirements:\n1. Define `class SlidingWindowRateLimiter` with `__init__(self, max_requests: int, window_seconds: float)`.\n2. Method `allow_request(key: str, timestamp: float) -> tuple[bool, int]`: Returns `(is_allowed, remaining_capacity)`.\n3. Automatically prune timestamps older than `timestamp - window_seconds`.\n4. Thread-safe with `threading.Lock`.\n5. Output ONLY the production class inside a single markdown block.",
+    "constraints": [],
+    "test_code": "import time\nlimiter = SlidingWindowRateLimiter(max_requests=3, window_seconds=1.0)\n\n# t = 100.0: 3 requests allowed\nok1, rem1 = limiter.allow_request(\"user_1\", 100.0)\nassert ok1 is True and rem1 == 2\n\nok2, rem2 = limiter.allow_request(\"user_1\", 100.1)\nassert ok2 is True and rem2 == 1\n\nok3, rem3 = limiter.allow_request(\"user_1\", 100.2)\nassert ok3 is True and rem3 == 0\n\n# 4th request at t=100.3 should be rejected\nok4, rem4 = limiter.allow_request(\"user_1\", 100.3)\nassert ok4 is False and rem4 == 0\n\n# t = 101.05: the first request at 100.0 has expired (window is 1.0s), so 1 slot freed\nok5, rem5 = limiter.allow_request(\"user_1\", 101.05)\nassert ok5 is True and rem5 == 0\n\nprint(\"Distributed Rate Limiter Test Passed!\")\n"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "go_01_worker_pool_backpressure",
+    "suite": "08_golang_worker_pool",
+    "title": "Go Bounded Worker Pool with Context Cancellation",
+    "difficulty": "hard",
+    "category": "systems",
+    "language": "go",
+    "description": "Implement a high-throughput bounded Goroutine worker pool with context propagation, worker lifecycle management, and graceful channel draining.",
+    "prompt": "You are an expert Go systems engineer. Implement a bounded worker pool in Go:\n\nRequirements:\n1. Define `type Task func(ctx context.Context) error`\n2. Define `type Pool struct` with `NewPool(workers int, queueSize int) *Pool`\n3. Method `Submit(task Task) bool`: Submits task to queue without blocking if buffer has space; returns false if queue is full.\n4. Method `Start(ctx context.Context)`: Spawns worker goroutines to process tasks until context is cancelled.\n5. Method `Stop()`: Gracefully waits for in-flight tasks to finish.\n6. Output ONLY the Go code (structs and methods).",
+    "constraints": [],
+    "test_code": "import (\n    \"context\"\n    \"sync/atomic\"\n    \"time\"\n)\n\nfunc main() {\n    ctx, cancel := context.WithCancel(context.Background())\n    defer cancel()\n\n    pool := NewPool(4, 10)\n    pool.Start(ctx)\n\n    var counter int64\n    for i := 0; i < 5; i++ {\n        ok := pool.Submit(func(c context.Context) error {\n            atomic.AddInt64(&counter, 1)\n            return nil\n        })\n        if !ok {\n            panic(\"failed to submit task\")\n        }\n    }\n\n    time.Sleep(50 * time.Millisecond)\n    pool.Stop()\n\n    if atomic.LoadInt64(&counter) != 5 {\n        panic(\"task count mismatch\")\n    }\n    println(\"Go Worker Pool Test Passed!\")\n}\n"
+  }
+]

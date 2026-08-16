@@ -1,0 +1,14 @@
+[
+  {
+    "id": "ts_02_json_chunk_stream_parser",
+    "suite": "06_typescript_streams",
+    "title": "TypeScript Streaming JSON Array Chunk Parser",
+    "difficulty": "hard",
+    "category": "web",
+    "language": "typescript",
+    "description": "Implement a streaming JSON array parser that extracts top-level objects as chunks arrive without loading entire payload into memory.",
+    "prompt": "You are an expert TypeScript systems engineer. Implement a streaming JSON array parser:\n\nRequirements:\n1. Define `class StreamingJsonArrayParser<T>` with `push(chunk: string): T[]` and `reset(): void`.\n2. It consumes arbitrary fragmented string chunks representing a JSON array `[{\"id\": 1}, {\"id\": 2}, ...]`.\n3. As soon as each complete top-level JSON object is balanced (matched braces), parse and return it in the result array of `push()`.\n4. Handle nested objects, escaped quotes in strings, and whitespace cleanly.\n5. Output ONLY the production class inside a single markdown block.",
+    "constraints": [],
+    "test_code": "import assert from \"node:assert\";\n\nconst parser = new StreamingJsonArrayParser<{ id: number; name: string }>();\n\nconst r1 = parser.push(\"  [ {\\\"id\\\": 1, \\\"name\\\": \\\"first\\\" }, \");\nassert.strictEqual(r1.length, 1);\nassert.strictEqual(r1[0].name, \"first\");\n\nconst r2 = parser.push(\"{\\\"id\\\": 2, \\\"name\\\": \\\"second\\\"} , \");\nassert.strictEqual(r2.length, 1);\nassert.strictEqual(r2[0].id, 2);\n\nconst r3 = parser.push(\"{\\\"id\\\": 3, \\\"nested\\\": { \\\"a\\\": 1 }}, \");\nassert.strictEqual(r3.length, 1);\n\nconsole.log(\"TypeScript Streaming JSON Parser Test Passed!\");\n"
+  }
+]

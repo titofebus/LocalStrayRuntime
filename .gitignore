@@ -1,0 +1,19 @@
+.DS_Store
+.venv/
+.pytest_cache/
+**/__pycache__/
+*.py[cod]
+.sandbox_tmp/
+sandbox_output/
+.artifacts/
+build/
+dist/
+*.egg-info/
+*.log
+report.html
+results/*.json
+DFlashStudio
+DFlash Studio.app/
+*.zip
+EVALUATION_REPORT.md
+mac_app/

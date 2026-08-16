@@ -1,0 +1,21 @@
+[
+  {
+    "id": "ts_01_typed_event_stream_decoder",
+    "suite": "03_typescript_web",
+    "title": "Strictly-Typed Zero-Dependency SSE Stream Decoder",
+    "difficulty": "hard",
+    "category": "refactoring",
+    "language": "typescript",
+    "description": "Implement a zero-dependency, strictly-typed Server-Sent Events (SSE) stream parser for Node.js and modern Web environments with support for multi-line data, custom event names, IDs, retry intervals, and UTF-8 multi-chunk boundaries.",
+    "prompt": "You are a senior TypeScript engineer. Implement a zero-dependency SSE stream parser for browser and Node.js runtimes:\n\nRequirements:\n1. Define `export interface SSEMessage { id?: string; event: string; data: string; retry?: number; }`\n2. Define `export class SSEDecoder` with `public push(chunk: string): SSEMessage[]` and `public reset(): void`.\n3. Support multi-line `data:` fields joined with `\\n`.\n4. Default event name to `\"message\"` when not specified.\n5. Lines starting with `:` must be ignored as comments.\n6. Handle event dispatches on double newlines (`\\n\\n` and `\\r\\n\\r\\n`).\n7. Handle chunks fragmented in the middle of UTF-8 strings or double newline delimiters.",
+    "constraints": [
+      {
+        "name": "strict_interface",
+        "rule_type": "exact_schema",
+        "value": "interface SSEMessage",
+        "description": "Must export interface SSEMessage."
+      }
+    ],
+    "test_code": "const decoder = new SSEDecoder();\n\n// Test 1: Fragmented chunk parsing\nconst chunk1 = \"data: first line\\n\";\nconst chunk2 = \"data: second line\\nevent: custom\\nid: evt_1\\n\\n\";\n\nconst res1 = decoder.push(chunk1);\nconsole.assert(res1.length === 0, \"Expected 0 events for incomplete chunk\");\n\nconst res2 = decoder.push(chunk2);\nconsole.assert(res2.length === 1, \"Expected 1 event\");\nconsole.assert(res2[0].event === \"custom\", `Expected custom event, got ${res2[0].event}`);\nconsole.assert(res2[0].data === \"first line\\nsecond line\", `Expected multi-line data, got ${res2[0].data}`);\nconsole.assert(res2[0].id === \"evt_1\", `Expected id evt_1, got ${res2[0].id}`);\n\nconsole.log(\"TypeScript SSEDecoder Test Passed! 100% assertions satisfied.\");\n"
+  }
+]
