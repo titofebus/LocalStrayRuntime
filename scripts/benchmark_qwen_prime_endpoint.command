@@ -25,7 +25,7 @@ with urlopen("http://127.0.0.1:8000/v1/engine", timeout=10) as response:
     engine_identity = json.load(response)
 
 if (
-    engine_identity.get("runtime_id") != "qwen38-native-mtp-v1"
+    engine_identity.get("runtime_id") != "qwen38-native-mtp-v2"
     or engine_identity.get("prefix_cache_enabled") is not True
     or engine_identity.get("warmup_complete") is not True
 ):
@@ -34,9 +34,10 @@ if (
 print(
     "engine_identity="
     f"{engine_identity['target_model_id']} + {engine_identity['draft_model_id']}, "
-    f"target_bits={engine_identity['target_quantization_bits']}, "
-    f"draft_bits={engine_identity['draft_quantization_bits']}, "
+    f"target_quantization={engine_identity['target_quantization']}, "
+    f"draft_quantization={engine_identity['draft_quantization']}, "
     f"block_tokens={engine_identity['block_tokens']}, "
+    f"verify_mode={engine_identity['verify_mode']}, "
     f"prefix_cache={engine_identity['prefix_cache_enabled']}, "
     f"warmup={engine_identity['warmup_complete']}, "
     f"draft_sha256={engine_identity['draft_weights_sha256']}"
@@ -155,4 +156,6 @@ PY
 
 echo "Log: $LOG_PATH"
 echo
-read -k 1 "?Press any key to close..."
+if [[ -t 0 ]]; then
+    read -k 1 "?Press any key to close..."
+fi

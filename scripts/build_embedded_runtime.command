@@ -100,6 +100,7 @@ uv export --project "$PROJECT_DIR" --frozen --no-dev --no-editable --no-hashes \
 uv pip install \
     --python "$PAYLOAD/python/bin/python3.12" \
     --target "$PAYLOAD/site-packages" \
+    --refresh-package qwen-prime-runtime \
     --requirements "$BUILD_DIR/requirements.txt"
 
 find "$PAYLOAD" -type d -name __pycache__ -prune -exec rm -rf {} +

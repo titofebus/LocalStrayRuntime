@@ -32,6 +32,12 @@ def test_embedded_runtime_builder_has_a_read_only_verifier(tmp_path: Path):
     assert result.returncode == 0, result.stderr
 
 
+def test_embedded_runtime_builder_refreshes_local_runtime_wheel():
+    source = BUILDER.read_text(encoding="utf-8")
+
+    assert "--refresh-package qwen-prime-runtime" in source
+
+
 def test_embedded_launcher_resolves_python_relative_to_moved_payload(tmp_path: Path):
     payload = tmp_path / "runtime"
     moved = tmp_path / "moved-runtime"

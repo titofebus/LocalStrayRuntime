@@ -1,0 +1,25 @@
+You are a Principal Apple Silicon Metal Shading Language (MSL) & MLX kernel optimization engineer.
+
+CONTEXT & SPECIFICATION:
+We are optimizing the LM-Head projection and top-1 greedy token selection for Qwen 3.8-27B on an Apple M4 Max Mac (unified memory, 32-thread SIMDgroups) using MLX 0.32.0 (`mx.fast.metal_kernel`).
+
+DIMENSIONS & TYPES:
+- Hidden State (hidden): Shape (B, 5120), dtype float16 (or float32). B in [1, 4] (batch size / draft step count).
+- LM Head Weights (weights): Shape (248320, 5120), dtype float16.
+- Output (tokens): Shape (B,), dtype uint32 (the exact argmax token index for each row in batch).
+
+OBJECTIVE:
+Write a Fused Matrix-Vector Multiply + Argmax Reduction Metal kernel where:
+1. Matrix dot product (hidden @ weights.T) and Argmax reduction are computed SIMULTANEOUSLY in GPU registers / threadgroup shared memory.
+2. The 248,320-element float16 logits tensor (~500 KB per row) is NEVER allocated, written, or materialized into unified memory.
+3. Use a 2-stage or block-parallel reduction design:
+   - Stage 1: Grid of (num_blocks * 256, B, 1), Threadgroup (256, 1, 1), where num_blocks = 32.
+     Each block processes a slice of vocabulary (e.g. 7760 vocab rows). Each thread computes the 5120-dim dot product using vectorized `vec<T, 4>` loads, tracks running local max (val, idx), reduces across 32-wide SIMD lanes with `simd_shuffle_down`, then reduces across 8 warps in threadgroup memory.
+     Stage 1 outputs: block_max_vals of shape (B, 32) float32, block_max_indices of shape (B, 32) uint32.
+   - Stage 2: Grid of (32, B, 1), Threadgroup (32, 1, 1).
+     1 SIMD warp reduces the 32 block candidates into final_tokens of shape (B,) uint32.
+
+REQUIREMENTS:
+- Compatible with MLX `mx.fast.metal_kernel(name, input_names, output_names, source, header, compile_options={"math_mode": "fast"})`.
+- Polymorphic with `typedef typename metal::vec<T, 4> vec4_t;` so it compiles cleanly for both float16 and float32.
+- Provide the complete, working Python file `fused_lm_head.py` containing the MSL header, MSL source for Stage 1 and Stage 2, the `mx.fast.metal_kernel` instances, and the high-level Python function `fused_lm_head_argmax(hidden: mx.array, lm_head_weights: mx.array) -> mx.array`.

@@ -1,0 +1,112 @@
+You are an expert Apple Silicon Metal / MSL kernel optimization engineer.
+
+CONTEXT:
+We have set up an isolated sandbox in MLX (version 0.32.0) on an Apple M4 Max Mac to optimize two critical operations for Qwen3.8-27B MTP speculative inference:
+1. fast_vocab_argmax: Parallel argmax reduction over a 248,320-element vocabulary logits row (batch size B in [1, 4], float16).
+2. fused_dual_rmsnorm_concat: In-kernel dual RMSNorm + Concatenation for two parallel hidden vectors (embedding & hidden, dim D = 5120, float16).
+
+Here is the current working implementation in harness/kernels/sandbox/fused_mtp_ops.py:
+
+// Current Dual RMSNorm + Concat
+uint tid = thread_position_in_threadgroup.x;
+uint row = threadgroup_position_in_grid.y;
+uint tg_size = threads_per_threadgroup.x;
+uint D = 5120;
+float eps = 1e-6f;
+uint row_offset = row * D;
+uint out_offset = row * (2 * D);
+
+float sum_sq_emb = 0.0f;
+float sum_sq_hid = 0.0f;
+
+for (uint i = tid; i < D; i += tg_size) {
+    float val_e = float(emb[row_offset + i]);
+    float val_h = float(hid[row_offset + i]);
+    sum_sq_emb += val_e * val_e;
+    sum_sq_hid += val_h * val_h;
+}
+
+threadgroup float tg_sum_emb[256];
+threadgroup float tg_sum_hid[256];
+tg_sum_emb[tid] = sum_sq_emb;
+tg_sum_hid[tid] = sum_sq_hid;
+threadgroup_barrier(mem_flags::mem_threadgroup);
+
+for (uint s = tg_size / 2; s > 0; s >>= 1) {
+    if (tid < s) {
+        tg_sum_emb[tid] += tg_sum_emb[tid + s];
+        tg_sum_hid[tid] += tg_sum_hid[tid + s];
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+}
+
+float inv_rms_emb = metal::rsqrt(tg_sum_emb[0] / float(D) + eps);
+float inv_rms_hid = metal::rsqrt(tg_sum_hid[0] / float(D) + eps);
+threadgroup_barrier(mem_flags::mem_threadgroup);
+
+for (uint i = tid; i < D; i += tg_size) {
+    float e_norm = float(emb[row_offset + i]) * inv_rms_emb * float(w_emb[i]);
+    float h_norm = float(hid[row_offset + i]) * inv_rms_hid * float(w_hid[i]);
+    out[out_offset + i] = T(e_norm);
+    out[out_offset + D + i] = T(h_norm);
+}
+
+
+// Current 248k Vocab Argmax Stage 1 (32 blocks of 256 threads)
+uint block_id = threadgroup_position_in_grid.x;
+uint tid = thread_position_in_threadgroup.x;
+uint row = threadgroup_position_in_grid.y;
+uint tg_size = threads_per_threadgroup.x;
+
+uint V = 248320;
+uint num_blocks = 32;
+uint chunk_size = (V + num_blocks - 1) / num_blocks; // 7760 elements
+uint start_idx = block_id * chunk_size;
+uint end_idx = metal::min(start_idx + chunk_size, V);
+uint row_offset = row * V;
+
+float local_max = -1e30f;
+uint local_idx = start_idx;
+
+for (uint i = start_idx + tid; i < end_idx; i += tg_size) {
+    float val = float(logits[row_offset + i]);
+    if (val > local_max) {
+        local_max = val;
+        local_idx = i;
+    }
+}
+
+threadgroup float tg_vals[256];
+threadgroup uint tg_idxs[256];
+tg_vals[tid] = local_max;
+tg_idxs[tid] = local_idx;
+threadgroup_barrier(mem_flags::mem_threadgroup);
+
+for (uint s = tg_size / 2; s > 0; s >>= 1) {
+    if (tid < s) {
+        if (tg_vals[tid + s] > tg_vals[tid]) {
+            tg_vals[tid] = tg_vals[tid + s];
+            tg_idxs[tid] = tg_idxs[tid + s];
+        }
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+}
+
+if (tid == 0) {
+    uint out_idx = row * num_blocks + block_id;
+    block_max_vals[out_idx] = tg_vals[0];
+    block_max_indices[out_idx] = tg_idxs[0];
+}
+
+
+YOUR TASK:
+Rewrite both Metal Shading Language (MSL) shader bodies with state-of-the-art Apple Silicon optimizations:
+1. For Argmax:
+   - Use vectorized memory reads (e.g. half4 or half8 with reinterpret_cast / pointer arithmetic) to saturate memory bandwidth without cache stalls.
+   - Use simd_shuffle_down across 32-wide SIMD lanes to reduce intra-warp without hitting threadgroup shared memory, then do an 8-way reduction in threadgroup memory.
+2. For Dual RMSNorm + Concat:
+   - Vectorize with half4 / float4.
+   - Use SIMD shuffle reduction (simd_sum) across the 32 lanes.
+   - Ensure perfect numerical precision with FP32 accumulators.
+
+Provide the exact, complete, copy-paste ready Python file fused_mtp_ops.py with _DUAL_RMSNORM_CONCAT_SOURCE, _STAGE1_ARGMAX_SOURCE, _STAGE2_ARGMAX_SOURCE, and the Python wrappers. Ensure all variables and types compile cleanly in MLX mx.fast.metal_kernel.

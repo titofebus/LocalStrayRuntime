@@ -2,6 +2,7 @@ import ast
 from pathlib import Path
 
 import harness.dflash_runtime as dflash_runtime
+import pytest
 
 
 def test_production_generation_uses_tuned_four_token_mtp_blocks():
@@ -49,7 +50,8 @@ def test_production_generation_uses_tuned_four_token_mtp_blocks():
         assert block_tokens.attr == "block_tokens"
 
 
-def test_production_runtime_enables_native_prefix_cache_without_disk_l2():
+def test_production_runtime_uses_measured_adaptive_mode_and_native_prefix_cache(monkeypatch):
+    monkeypatch.delenv("QWEN_PRIME_VERIFY_MODE", raising=False)
     build_context = getattr(dflash_runtime, "build_dflash_runtime_context", None)
     assert callable(build_context)
 
@@ -59,6 +61,21 @@ def test_production_runtime_enables_native_prefix_cache_without_disk_l2():
     assert runtime.prefix_cache_l2 is False
     assert runtime.target_fa_window == 0
     assert runtime.verify_mode == "adaptive"
+
+
+def test_ddtree_can_be_enabled_explicitly_for_benchmarking(monkeypatch):
+    monkeypatch.setenv("QWEN_PRIME_VERIFY_MODE", "ddtree")
+
+    runtime = dflash_runtime.build_dflash_runtime_context().runtime
+
+    assert runtime.verify_mode == "ddtree"
+
+
+def test_unknown_verify_mode_is_rejected(monkeypatch):
+    monkeypatch.setenv("QWEN_PRIME_VERIFY_MODE", "turbo")
+
+    with pytest.raises(ValueError, match="QWEN_PRIME_VERIFY_MODE"):
+        dflash_runtime.build_dflash_runtime_context()
 
 
 def test_stream_generation_uses_dflash_prefix_snapshots_and_prefill_events():

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import threading
 from types import SimpleNamespace
 from typing import Any, Optional
 
@@ -14,6 +15,10 @@ from mlx_lm.models.cache import KVCache
 from mlx_lm.models.qwen3_5 import DecoderLayer, TextModelArgs
 
 from dflash_mlx.engine.sampling import greedy_tokens_with_mask
+from harness.kernels.sandbox.fused_mtp_ops import (
+    fast_vocab_argmax,
+    fused_dual_rmsnorm_concat,
+)
 
 
 class Qwen38MTPModel(nn.Module):
@@ -75,33 +80,147 @@ class Qwen38MTPModel(nn.Module):
         if draft_count <= 0:
             return mx.array([], dtype=mx.uint32)
 
-        hidden = target_hidden[:, -1:, :]
-        token = staged_first[:1].astype(mx.uint32)
-        cache = KVCache()
-        drafted: list[mx.array] = []
+        candidate = self.predict_candidate(
+            target_model=target_model,
+            target_ops=target_ops,
+            prefix_tokens=staged_first[:1],
+            target_hidden=target_hidden,
+            block_len=draft_count + 1,
+            suppress_token_mask=suppress_token_mask,
+        )
+        return candidate[1:]
 
-        for _ in range(draft_count):
+    def _predict_candidate_with_topk(
+        self,
+        *,
+        target_model: Any,
+        target_ops: Any,
+        prefix_tokens: mx.array,
+        target_hidden: mx.array,
+        block_len: int,
+        suppress_token_mask: Optional[mx.array],
+        top_width: Optional[int],
+    ) -> tuple[mx.array, list[list[int]], list[list[float]]]:
+        prefix_len = int(prefix_tokens.shape[0])
+        if prefix_len <= 0:
+            raise ValueError("prefix_tokens must not be empty")
+        if prefix_len > block_len:
+            raise ValueError("prefix_tokens cannot be longer than block_len")
+
+        hidden = target_hidden[:, -1:, :]
+        token = prefix_tokens[:1].astype(mx.uint32)
+        cache = KVCache()
+        candidate = [token]
+        top_ids: list[list[int]] = []
+        top_values: list[list[float]] = []
+        topk_logits: list[mx.array] = []
+
+        w_emb = self.pre_fc_norm_embedding.weight
+        w_hid = self.pre_fc_norm_hidden.weight
+        eps = float(self.norm.eps)
+
+        for position in range(1, block_len):
             embedding = target_ops.embed_tokens(target_model)(token[None])
-            fused = mx.concatenate(
-                [
-                    self.pre_fc_norm_embedding(embedding),
-                    self.pre_fc_norm_hidden(hidden),
-                ],
-                axis=-1,
-            )
+            fused = fused_dual_rmsnorm_concat(
+                embedding.reshape(1, -1),
+                hidden.reshape(1, -1),
+                w_emb,
+                w_hid,
+                eps=eps,
+            ).reshape(1, 1, -1)
             hidden = self.fc(fused)
             mask = create_attention_mask(hidden, cache)
             hidden = self.layers[0](hidden, mask=mask, cache=cache)
             hidden = self.norm(hidden)
             logits = target_ops.logits_from_hidden(target_model, hidden[:, -1:, :])
-            token = greedy_tokens_with_mask(logits[:, -1, :], suppress_token_mask).reshape(-1)
-            drafted.append(token.astype(mx.uint32))
+            if top_width is not None:
+                masked_logits = logits[:, -1, :]
+                if suppress_token_mask is not None:
+                    floor = mx.array(-1e9, dtype=masked_logits.dtype)
+                    masked_logits = mx.where(
+                        suppress_token_mask,
+                        floor,
+                        masked_logits,
+                    )
+                topk_logits.append(masked_logits)
+            if suppress_token_mask is None:
+                predicted = fast_vocab_argmax(logits[:, -1, :]).reshape(-1)
+            else:
+                predicted = greedy_tokens_with_mask(
+                    logits[:, -1, :],
+                    suppress_token_mask,
+                ).reshape(-1)
+            token = (
+                prefix_tokens[position : position + 1].astype(mx.uint32)
+                if position < prefix_len
+                else predicted.astype(mx.uint32)
+            )
+            candidate.append(token)
 
-        return mx.concatenate(drafted, axis=0)
+        if top_width is not None and topk_logits:
+            from dflash_mlx.engine.ddtree import top_ids_and_values_desc
+
+            top_ids, top_values = top_ids_and_values_desc(
+                mx.concatenate(topk_logits, axis=0),
+                width=top_width,
+            )
+
+        return mx.concatenate(candidate, axis=0), top_ids, top_values
+
+    def predict_block_with_topk(
+        self,
+        *,
+        target_model: Any,
+        target_ops: Any,
+        prefix_tokens: mx.array,
+        target_hidden: mx.array,
+        block_len: int,
+        suppress_token_mask: Optional[mx.array],
+        top_width: int,
+    ) -> tuple[mx.array, list[list[int]], list[list[float]]]:
+        candidate, top_ids, top_values = self._predict_candidate_with_topk(
+            target_model=target_model,
+            target_ops=target_ops,
+            prefix_tokens=prefix_tokens,
+            target_hidden=target_hidden,
+            block_len=block_len,
+            suppress_token_mask=suppress_token_mask,
+            top_width=top_width,
+        )
+        return candidate[1:], top_ids, top_values
+
+    def predict_candidate(
+        self,
+        *,
+        target_model: Any,
+        target_ops: Any,
+        prefix_tokens: mx.array,
+        target_hidden: mx.array,
+        block_len: int,
+        suppress_token_mask: Optional[mx.array],
+    ) -> mx.array:
+        candidate, _, _ = self._predict_candidate_with_topk(
+            target_model=target_model,
+            target_ops=target_ops,
+            prefix_tokens=prefix_tokens,
+            target_hidden=target_hidden,
+            block_len=block_len,
+            suppress_token_mask=suppress_token_mask,
+            top_width=None,
+        )
+        return candidate
 
 
 class MTPDraftBackend:
     """Adapter allowing native MTP proposals to use the hardened DFlash verifier."""
+
+    def __init__(self) -> None:
+        self._owner_thread_id = threading.get_ident()
+        self._draft_stream = mx.new_stream(mx.gpu)
+
+    def _require_owner_thread(self) -> None:
+        if threading.get_ident() != self._owner_thread_id:
+            raise RuntimeError("MTP draft stream used from a different thread")
 
     def make_cache(self, **_: Any) -> list[Any]:
         return []
@@ -119,28 +238,76 @@ class MTPDraftBackend:
         async_launch: bool,
         **_: Any,
     ) -> mx.array:
-        drafted = draft_model.predict_block(
-            target_model=target_model,
-            target_ops=target_ops,
-            staged_first=staged_first,
-            target_hidden=draft_context,
-            draft_count=max(0, int(block_len) - 1),
-            suppress_token_mask=suppress_token_mask,
-        )
-        if async_launch:
-            mx.async_eval(drafted)
-        else:
-            mx.eval(drafted)
+        self._require_owner_thread()
+        with mx.stream(self._draft_stream):
+            drafted = draft_model.predict_block(
+                target_model=target_model,
+                target_ops=target_ops,
+                staged_first=staged_first,
+                target_hidden=draft_context,
+                draft_count=max(0, int(block_len) - 1),
+                suppress_token_mask=suppress_token_mask,
+            )
+            if async_launch:
+                mx.async_eval(drafted)
+            else:
+                mx.eval(drafted)
         return drafted
 
     def advance_context(self, **_: Any) -> None:
         return None
 
-    def draft_with_topk(self, **_: Any):
-        raise NotImplementedError("Qwen3.8 MTP supports linear speculative verification only")
+    def draft_with_topk(
+        self,
+        *,
+        target_model: Any,
+        target_ops: Any,
+        draft_model: Qwen38MTPModel,
+        prefix_tokens: mx.array,
+        draft_context: mx.array,
+        block_len: int,
+        suppress_token_mask: Optional[mx.array],
+        top_width: int,
+        **_: Any,
+    ) -> tuple[mx.array, list[list[int]], list[list[float]]]:
+        self._require_owner_thread()
+        with mx.stream(self._draft_stream):
+            return draft_model.predict_block_with_topk(
+                target_model=target_model,
+                target_ops=target_ops,
+                prefix_tokens=prefix_tokens,
+                target_hidden=draft_context,
+                block_len=block_len,
+                suppress_token_mask=suppress_token_mask,
+                top_width=top_width,
+            )
 
-    def draft_branch_blocks_batch(self, **_: Any):
-        raise NotImplementedError("Qwen3.8 MTP does not support DDTree")
+    def draft_branch_blocks_batch(
+        self,
+        *,
+        target_model: Any,
+        target_ops: Any,
+        draft_model: Qwen38MTPModel,
+        branch_prefixes: list[mx.array],
+        draft_context: mx.array,
+        block_len: int,
+        suppress_token_mask: Optional[mx.array],
+        **_: Any,
+    ) -> list[mx.array]:
+        self._require_owner_thread()
+        with mx.stream(self._draft_stream):
+            results = []
+            for prefix in branch_prefixes:
+                candidate = draft_model.predict_candidate(
+                    target_model=target_model,
+                    target_ops=target_ops,
+                    prefix_tokens=prefix,
+                    target_hidden=draft_context,
+                    block_len=block_len,
+                    suppress_token_mask=suppress_token_mask,
+                )
+                results.append(candidate)
+            return results
 
 
 def load_qwen38_mtp(path: str | Path) -> tuple[Qwen38MTPModel, dict[str, Any]]:

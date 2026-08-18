@@ -37,6 +37,34 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _quantization_identity(config: dict[str, object]) -> dict[str, object]:
+    quantization = config.get("quantization")
+    if not isinstance(quantization, dict):
+        raise ValueError("Model config has no quantization metadata")
+
+    default_bits = quantization.get("bits")
+    group_size = quantization.get("group_size")
+    mode = quantization.get("mode")
+    if not isinstance(default_bits, int) or not isinstance(group_size, int):
+        raise ValueError("Model quantization metadata is incomplete")
+    if not isinstance(mode, str) or not mode:
+        raise ValueError("Model quantization mode is missing")
+
+    bits = {default_bits}
+    for value in quantization.values():
+        if isinstance(value, dict) and isinstance(value.get("bits"), int):
+            bits.add(value["bits"])
+
+    sorted_bits = sorted(bits)
+    return {
+        "scheme": "mixed" if len(sorted_bits) > 1 else "uniform",
+        "bits": sorted_bits,
+        "default_bits": default_bits,
+        "group_size": group_size,
+        "mode": mode,
+    }
+
+
 def validate_speculative_pair(
     target_path: str | Path,
     draft_path: str | Path,
@@ -109,14 +137,14 @@ def qwen_prime_runtime_identity(
     )
 
     return {
-        "runtime_id": "qwen38-native-mtp-v1",
+        "runtime_id": "qwen38-native-mtp-v2",
         "target_model_id": pair.target_model_id,
         "draft_model_id": pair.draft_model_id,
         "target_path": str(target_root),
         "draft_path": str(draft_root),
         "block_tokens": block_tokens,
-        "target_quantization_bits": target_config.get("quantization", {}).get("bits"),
-        "draft_quantization_bits": draft_config.get("quantization", {}).get("bits"),
+        "target_quantization": _quantization_identity(target_config),
+        "draft_quantization": _quantization_identity(draft_config),
         "draft_model_type": draft_config.get("model_type"),
         "draft_norm_weight_offset": draft_config.get("norm_weight_offset"),
         "draft_weights_sha256": pair.weights_sha256,

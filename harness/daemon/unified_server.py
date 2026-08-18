@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 import mlx.core as mx
 from harness.executors.dflash_engine import DFlashEngine
 from harness.daemon.stream_stats import combine_generation_usage
+from harness.daemon.stream_sanitizer import ControlTokenFilter, ToolMarkupFilter
 from harness.daemon.qwen_chat import (
     format_assistant_turn,
     generation_limits,
@@ -100,6 +101,9 @@ async def engine_identity():
     )
     identity["prefix_cache_enabled"] = bool(
         worker.engine._runtime_context.runtime.prefix_cache
+    )
+    identity["verify_mode"] = str(
+        worker.engine._runtime_context.runtime.verify_mode
     )
     identity["warmup_complete"] = worker.warmup_complete
     return identity
@@ -306,6 +310,9 @@ async def chat_completions(request: Request):
                 cancel_event,
             ):
                 phase_usage = []
+                content_filter = ControlTokenFilter()
+                tool_filter = ToolMarkupFilter() if tools else None
+                content_stopped = False
                 if enable_thinking:
                     # Phase 1: Reasoning phase with hard </think> stop token (248069)
                     thought_text = ""
@@ -358,8 +365,13 @@ async def chat_completions(request: Request):
                             return
                         if ev[0] == "usage":
                             phase_usage.append(ev[1])
-                        else:
-                            yield ev
+                        elif ev[0] == "token" and not content_stopped:
+                            clean_txt = str(ev[1]).replace("<think>", "").replace("</think>", "")
+                            clean_txt, content_stopped = content_filter.push(clean_txt)
+                            if tool_filter is not None:
+                                clean_txt = tool_filter.push(clean_txt)
+                            if clean_txt:
+                                yield ("token", clean_txt)
                 else:
                     # Direct mode skips the separate reasoning generation pass.
                     for ev in engine.stream_generate_tokens(
@@ -374,8 +386,26 @@ async def chat_completions(request: Request):
                             return
                         if ev[0] == "usage":
                             phase_usage.append(ev[1])
-                        else:
-                            yield ev
+                        elif ev[0] == "token" and not content_stopped:
+                            clean_txt = str(ev[1]).replace("<think>", "").replace("</think>", "")
+                            clean_txt, content_stopped = content_filter.push(clean_txt)
+                            if tool_filter is not None:
+                                clean_txt = tool_filter.push(clean_txt)
+                            if clean_txt:
+                                yield ("token", clean_txt)
+
+                if not content_stopped:
+                    trailing_content = content_filter.finish()
+                    if tool_filter is not None:
+                        trailing_content = tool_filter.push(trailing_content)
+                    if trailing_content:
+                        yield ("token", trailing_content)
+                if tool_filter is not None:
+                    trailing_content = tool_filter.finish()
+                    if trailing_content:
+                        yield ("token", trailing_content)
+                    if tool_filter.captured_text:
+                        yield ("tool_markup", tool_filter.captured_text)
 
                 if phase_usage:
                     yield (
@@ -395,6 +425,7 @@ async def chat_completions(request: Request):
             ))
 
             accumulated_text = ""
+            tool_markup_text = ""
             stats = None
 
             try:
@@ -410,6 +441,10 @@ async def chat_completions(request: Request):
 
                     if ev_type == "usage":
                         stats = payload
+                        continue
+
+                    if ev_type == "tool_markup":
+                        tool_markup_text += str(payload)
                         continue
 
                     if ev_type == "reasoning_token":
@@ -447,7 +482,7 @@ async def chat_completions(request: Request):
                             yield f"data: {json.dumps(delta_data)}\n\n"
 
                 # Check for tool calls in accumulated output
-                clean_text, tool_calls = extract_tool_calls(accumulated_text)
+                _, tool_calls = extract_tool_calls(tool_markup_text)
                 if tool_calls:
                     for idx, tc in enumerate(tool_calls):
                         tc_chunk = {
