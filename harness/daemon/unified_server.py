@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 import mlx.core as mx
 from harness.executors.dflash_engine import DFlashEngine
 from harness.daemon.stream_stats import combine_generation_usage
-from harness.daemon.stream_sanitizer import ControlTokenFilter, ToolMarkupFilter
+from harness.daemon.stream_sanitizer import ControlTokenFilter, ToolMarkupFilter, extract_tool_calls, should_use_prefix_cache, STRUCTURED_TOOL_CALLS_V1
 from harness.daemon.qwen_chat import (
     format_assistant_turn,
     generation_limits,
@@ -99,6 +99,9 @@ async def engine_identity():
         worker.engine.draft_ref,
         block_tokens=worker.engine.block_tokens,
     )
+    draft_model = getattr(getattr(worker.engine, "_bundle", None), "draft_model", None)
+    fused_mtp_enabled = getattr(draft_model, "fused_mtp", False)
+
     identity["prefix_cache_enabled"] = bool(
         worker.engine._runtime_context.runtime.prefix_cache
     )
@@ -106,6 +109,12 @@ async def engine_identity():
         worker.engine._runtime_context.runtime.verify_mode
     )
     identity["warmup_complete"] = worker.warmup_complete
+    identity["capabilities"] = [STRUCTURED_TOOL_CALLS_V1]
+    identity["runtime_features"] = {
+        "verify_mode": identity["verify_mode"],
+        "fused_mtp": bool(fused_mtp_enabled),
+        "fp8_kv_cache": False,
+    }
     return identity
 
 def format_messages_to_qwen_chat(
@@ -193,35 +202,6 @@ def format_messages_to_qwen_chat(
         prompt += "<|im_start|>assistant\n<think>\n\n</think>\n\n"
     return prompt
 
-def extract_tool_calls(text: str) -> Tuple[str, List[Dict[str, Any]]]:
-    """Extract <tool_call> JSON blocks from output text."""
-    tool_calls = []
-    clean_text = text
-
-    matches = list(re.finditer(r"<tool_call>\s*(.*?)\s*</tool_call>", text, re.DOTALL))
-    for match in matches:
-        raw_json = match.group(1).strip()
-        try:
-            call_obj = json.loads(raw_json)
-            name = call_obj.get("name", "ipython")
-            args = call_obj.get("arguments", {})
-            args_str = json.dumps(args) if isinstance(args, dict) else str(args)
-            tool_calls.append({
-                "id": f"call_{uuid.uuid4().hex[:8]}",
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "arguments": args_str
-                }
-            })
-        except Exception:
-            pass
-
-    if tool_calls:
-        clean_text = re.sub(r"<tool_call>\s*.*?\s*</tool_call>", "", text, flags=re.DOTALL).strip()
-
-    return clean_text, tool_calls
-
 @app.post("/v1/chat/completions")
 @app.post("/chat/completions")
 async def chat_completions(request: Request):
@@ -236,6 +216,7 @@ async def chat_completions(request: Request):
     model = body.get("model", MODEL_ID)
     messages = body.get("messages", [])
     tools = body.get("tools")
+    use_prefix_cache = should_use_prefix_cache(tools)
     temperature = body.get("temperature", 0.1)
     max_tokens, max_reasoning_tokens = generation_limits(body)
     stream = body.get("stream", False)
@@ -307,15 +288,19 @@ async def chat_completions(request: Request):
                 max_reasoning_tokens,
                 enable_thinking,
                 messages,
+                use_prefix_cache,
                 cancel_event,
             ):
                 phase_usage = []
                 content_filter = ControlTokenFilter()
+                reasoning_filter = ControlTokenFilter()
                 tool_filter = ToolMarkupFilter() if tools else None
                 content_stopped = False
+                reasoning_stopped = False
                 if enable_thinking:
                     # Phase 1: Reasoning phase with hard </think> stop token (248069)
                     thought_text = ""
+                    sanitized_thought_text = ""
                     reasoning_complete = False
                     stop_ids_phase1 = [248046, 248044, 248069]
                     for ev in engine.stream_generate_tokens(
@@ -325,6 +310,7 @@ async def chat_completions(request: Request):
                         use_speculative=True,
                         stop_token_ids=stop_ids_phase1,
                         messages=messages,
+                        use_prefix_cache=use_prefix_cache,
                     ):
                         if cancel_event.is_set():
                             return
@@ -336,18 +322,30 @@ async def chat_completions(request: Request):
                             thought_text += txt
                             if "</think>" in txt or "</think>" in thought_text:
                                 clean_txt = txt.replace("</think>", "")
+                                clean_txt, reasoning_stopped = reasoning_filter.push(clean_txt)
                                 if clean_txt:
+                                    sanitized_thought_text += clean_txt
                                     yield ("reasoning_token", clean_txt)
                                 reasoning_complete = True
                             else:
                                 clean_txt = txt.replace("<think>", "")
+                                clean_txt, reasoning_stopped = reasoning_filter.push(clean_txt)
                                 if clean_txt:
+                                    sanitized_thought_text += clean_txt
                                     yield ("reasoning_token", clean_txt)
+                            if reasoning_stopped:
+                                break
                         elif ev_type == "usage":
                             phase_usage.append(payload)
 
+                    if not reasoning_stopped:
+                        trailing_reasoning = reasoning_filter.finish()
+                        if trailing_reasoning:
+                            sanitized_thought_text += trailing_reasoning
+                            yield ("reasoning_token", trailing_reasoning)
+
                     # Phase 2: Direct Structured Code generation after </think>
-                    code_prompt = prompt + thought_text
+                    code_prompt = prompt + sanitized_thought_text
                     if not code_prompt.rstrip().endswith("</think>"):
                         code_prompt = code_prompt.rstrip() + "\n</think>\n\n"
                     else:
@@ -360,6 +358,7 @@ async def chat_completions(request: Request):
                         use_speculative=True,
                         stop_token_ids=[248046, 248044],
                         messages=messages,
+                        use_prefix_cache=use_prefix_cache,
                     ):
                         if cancel_event.is_set():
                             return
@@ -381,6 +380,7 @@ async def chat_completions(request: Request):
                         use_speculative=True,
                         stop_token_ids=[248046, 248044],
                         messages=messages,
+                        use_prefix_cache=use_prefix_cache,
                     ):
                         if cancel_event.is_set():
                             return
@@ -418,7 +418,7 @@ async def chat_completions(request: Request):
 
             worker.task_queue.put((
                 stream_gen,
-                (prompt, max_tokens, max_reasoning_tokens, enable_thinking, messages),
+                (prompt, max_tokens, max_reasoning_tokens, enable_thinking, messages, use_prefix_cache),
                 cancel_event,
                 event_queue,
                 loop,

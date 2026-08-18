@@ -1,13 +1,11 @@
-"""
-Native Hardware-Accelerated FP8 (E4M3) KV Cache for Apple Silicon (MLX).
-"""
-from typing import Tuple, Optional
+"""Native Hardware-Accelerated FP8 (E4M3) KV Cache for Apple Silicon (MLX)."""
+from typing import Optional, Tuple
 import mlx.core as mx
 
 
 class NativeFP8KVCache:
-    """
-    Hardware-accelerated E4M3 FP8 KV Cache using Apple MLX native to_fp8/from_fp8.
+    """Hardware-accelerated E4M3 FP8 KV Cache using Apple MLX native to_fp8/from_fp8.
+
     Halves physical memory bandwidth on KV-cache reads with <0.5% numerical deviation.
     """
 
@@ -33,8 +31,8 @@ class NativeFP8KVCache:
         self.current_len = 0
 
     def update(self, keys: mx.array, values: mx.array) -> None:
-        """
-        Update KV cache with new keys and values.
+        """Update KV cache with new keys and values.
+
         keys, values shape: (batch_size, num_heads, seq_len, head_dim)
         """
         batch_size, num_heads, seq_len, head_dim = keys.shape
@@ -94,37 +92,3 @@ class NativeFP8KVCache:
         values = mx.transpose(values[None, ...], (0, 2, 1, 3))
 
         return keys, values
-
-
-def test_fp8_kv_cache():
-    print("=" * 65)
-    print(" TESTING NATIVE APPLE MLX FP8 (E4M3) KV-CACHE")
-    print("=" * 65)
-
-    num_heads = 4
-    head_dim = 128
-    seq_len = 128
-
-    cache = NativeFP8KVCache(num_heads=num_heads, head_dim=head_dim, max_seq_len=512)
-
-    k_orig = mx.random.normal((1, num_heads, seq_len, head_dim)).astype(mx.float16)
-    v_orig = mx.random.normal((1, num_heads, seq_len, head_dim)).astype(mx.float16)
-
-    cache.update(k_orig, v_orig)
-    k_deq, v_deq = cache.get(0, seq_len)
-
-    k_l1 = (mx.mean(mx.abs(k_deq - k_orig)) / mx.mean(mx.abs(k_orig))).item()
-    v_l1 = (mx.mean(mx.abs(v_deq - v_orig)) / mx.mean(mx.abs(v_orig))).item()
-
-    print(f"Key L1 Relative Error:   {k_l1 * 100:.3f}%")
-    print(f"Value L1 Relative Error: {v_l1 * 100:.3f}%")
-    print(f"Physical Memory Traffic: -50.0% bandwidth reduction on Apple Silicon")
-
-    assert k_l1 < 0.03, "FP8 Key quantization error exceeds 3%"
-    assert v_l1 < 0.03, "FP8 Value quantization error exceeds 3%"
-    print(" [SUCCESS] Native MLX FP8 KV-Cache verified!")
-    print("=" * 65)
-
-
-if __name__ == "__main__":
-    test_fp8_kv_cache()

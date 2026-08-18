@@ -47,12 +47,35 @@ def _apply_runtime_config() -> dict[str, Any]:
 
 def configure(args: argparse.Namespace) -> int:
     current = _read_json(RUNTIME_CONFIG)
+    target_path = str(Path(args.target).expanduser().resolve())
+    draft_path = str(Path(args.draft).expanduser().resolve())
     current.update(
         {
-            "target_model": str(Path(args.target).expanduser().resolve()),
-            "draft_model": str(Path(args.draft).expanduser().resolve()),
+            "target_model": target_path,
+            "draft_model": draft_path,
         }
     )
+    profiles = current.get("profiles")
+    if isinstance(profiles, list) and profiles:
+        active_id = current.get("active_profile_id")
+        active_profile = next(
+            (
+                profile
+                for profile in profiles
+                if isinstance(profile, dict) and profile.get("id") == active_id
+            ),
+            None,
+        )
+        if active_profile is None:
+            active_profile = next(
+                (profile for profile in profiles if isinstance(profile, dict)),
+                None,
+            )
+            if active_profile is not None and isinstance(active_profile.get("id"), str):
+                current["active_profile_id"] = active_profile["id"]
+        if active_profile is not None:
+            active_profile["targetModelPath"] = target_path
+            active_profile["draftModelPath"] = draft_path
     _write_json(RUNTIME_CONFIG, current)
     print(f"Wrote {RUNTIME_CONFIG}")
     return 0

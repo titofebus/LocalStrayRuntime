@@ -1,4 +1,5 @@
 """DeepSeek-optimized polymorphic Metal Shading Language (MSL) kernels for Qwen 3.8 MTP."""
+import os
 import mlx.core as mx
 
 # ---------------------------------------------------------------------------
@@ -295,3 +296,22 @@ def fast_vocab_argmax(logits: mx.array) -> mx.array:
     )[0]
 
     return final_tokens
+
+
+def is_fused_mtp_supported() -> bool:
+    """Check if Metal GPU execution is available for fused kernels."""
+    try:
+        if not mx.metal.is_available():
+            return False
+        _ = mx.default_stream(mx.gpu)
+        return True
+    except Exception:
+        return False
+
+
+def is_fused_mtp_enabled() -> bool:
+    """Check if fused MTP is enabled via environment variable and supported on device."""
+    flag = os.environ.get("QWEN_PRIME_FUSED_MTP", "1").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return False
+    return is_fused_mtp_supported()

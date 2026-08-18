@@ -15,17 +15,23 @@ from mlx_lm.models.cache import KVCache
 from mlx_lm.models.qwen3_5 import DecoderLayer, TextModelArgs
 
 from dflash_mlx.engine.sampling import greedy_tokens_with_mask
-from harness.kernels.sandbox.fused_mtp_ops import (
+from harness.kernels.fused_mtp_ops import (
     fast_vocab_argmax,
     fused_dual_rmsnorm_concat,
+    is_fused_mtp_enabled,
+    is_fused_mtp_supported,
 )
 
 
 class Qwen38MTPModel(nn.Module):
     """The Qwen3.8 checkpoint's bundled one-layer multi-token predictor."""
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any], fused_mtp: Optional[bool] = None):
         super().__init__()
+        if fused_mtp is not None:
+            self.fused_mtp = bool(fused_mtp)
+        else:
+            self.fused_mtp = is_fused_mtp_enabled()
         text_args = TextModelArgs.from_dict(
             {
                 "model_type": "qwen3_5_text",
@@ -121,13 +127,22 @@ class Qwen38MTPModel(nn.Module):
 
         for position in range(1, block_len):
             embedding = target_ops.embed_tokens(target_model)(token[None])
-            fused = fused_dual_rmsnorm_concat(
-                embedding.reshape(1, -1),
-                hidden.reshape(1, -1),
-                w_emb,
-                w_hid,
-                eps=eps,
-            ).reshape(1, 1, -1)
+            if self.fused_mtp:
+                fused = fused_dual_rmsnorm_concat(
+                    embedding.reshape(1, -1),
+                    hidden.reshape(1, -1),
+                    w_emb,
+                    w_hid,
+                    eps=eps,
+                ).reshape(1, 1, -1)
+            else:
+                fused = mx.concatenate(
+                    [
+                        self.pre_fc_norm_embedding(embedding),
+                        self.pre_fc_norm_hidden(hidden),
+                    ],
+                    axis=-1,
+                )
             hidden = self.fc(fused)
             mask = create_attention_mask(hidden, cache)
             hidden = self.layers[0](hidden, mask=mask, cache=cache)
@@ -143,7 +158,7 @@ class Qwen38MTPModel(nn.Module):
                         masked_logits,
                     )
                 topk_logits.append(masked_logits)
-            if suppress_token_mask is None:
+            if suppress_token_mask is None and self.fused_mtp:
                 predicted = fast_vocab_argmax(logits[:, -1, :]).reshape(-1)
             else:
                 predicted = greedy_tokens_with_mask(
@@ -216,7 +231,10 @@ class MTPDraftBackend:
 
     def __init__(self) -> None:
         self._owner_thread_id = threading.get_ident()
-        self._draft_stream = mx.new_stream(mx.gpu)
+        try:
+            self._draft_stream = mx.new_stream(mx.gpu)
+        except Exception:
+            self._draft_stream = mx.default_stream(mx.cpu)
 
     def _require_owner_thread(self) -> None:
         if threading.get_ident() != self._owner_thread_id:
@@ -310,14 +328,17 @@ class MTPDraftBackend:
             return results
 
 
-def load_qwen38_mtp(path: str | Path) -> tuple[Qwen38MTPModel, dict[str, Any]]:
+def load_qwen38_mtp(
+    path: str | Path,
+    fused_mtp: Optional[bool] = None,
+) -> tuple[Qwen38MTPModel, dict[str, Any]]:
     root = Path(path)
     config = json.loads((root / "config.json").read_text(encoding="utf-8"))
     if config.get("target_model_id") != "Qwen/Qwen3.8-27B":
         raise ValueError("MTP artifact is not bound to Qwen/Qwen3.8-27B")
 
     weights = mx.load(str(root / "model.safetensors"))
-    model = Qwen38MTPModel(config)
+    model = Qwen38MTPModel(config, fused_mtp=fused_mtp)
     quantization = config.get("quantization")
     if quantization:
         nn.quantize(

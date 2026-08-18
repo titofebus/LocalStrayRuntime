@@ -24,6 +24,45 @@ def test_configure_writes_portable_runtime_paths(tmp_path: Path, monkeypatch):
     }
 
 
+def test_configure_updates_active_swift_profile(tmp_path: Path, monkeypatch):
+    config_path = tmp_path / "runtime.json"
+    target = tmp_path / "new-target"
+    draft = tmp_path / "new-draft"
+    target.mkdir()
+    draft.mkdir()
+    active_id = "00000000-0000-0000-0000-000000000001"
+    config_path.write_text(
+        json.dumps(
+            {
+                "target_model": "/models/old-target",
+                "draft_model": "/models/old-draft",
+                "active_profile_id": active_id,
+                "profiles": [
+                    {
+                        "id": active_id,
+                        "name": "Hybrid",
+                        "targetModelPath": "/models/old-target",
+                        "draftModelPath": "/models/old-draft",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime_cli, "RUNTIME_CONFIG", config_path)
+
+    result = runtime_cli.configure(
+        argparse.Namespace(target=str(target), draft=str(draft))
+    )
+
+    assert result == 0
+    updated = json.loads(config_path.read_text(encoding="utf-8"))
+    assert updated["target_model"] == str(target)
+    assert updated["draft_model"] == str(draft)
+    assert updated["profiles"][0]["targetModelPath"] == str(target)
+    assert updated["profiles"][0]["draftModelPath"] == str(draft)
+
+
 def test_prime_agent_configuration_preserves_existing_providers(
     tmp_path: Path, monkeypatch
 ):

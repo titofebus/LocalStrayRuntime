@@ -1,7 +1,12 @@
 import mlx.core as mx
 import pytest
 
-from harness.kernels.sandbox.fp8_kv_cache import NativeFP8KVCache
+try:
+    mx.eval(mx.zeros((1,)))
+except RuntimeError:
+    pytest.skip("Metal device not available in environment", allow_module_level=True)
+
+from harness.kernels.fp8_kv_cache import NativeFP8KVCache
 
 
 def test_fp8_cache_preserves_earlier_tokens_when_later_scale_is_larger():

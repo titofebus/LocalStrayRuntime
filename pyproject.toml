@@ -24,6 +24,9 @@ training = ["numpy>=2.0.0"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["harness"]
 exclude = [
@@ -65,21 +68,30 @@ include = [
     "/harness/runtime_cli.py",
     "/harness/core/models.py",
     "/harness/daemon/qwen_chat.py",
+    "/harness/daemon/stream_sanitizer.py",
     "/harness/daemon/stream_stats.py",
     "/harness/daemon/unified_server.py",
     "/harness/executors/dflash_engine.py",
     "/harness/executors/qwen38_mtp.py",
+    "/harness/kernels/__init__.py",
+    "/harness/kernels/fused_mtp_ops.py",
+    "/harness/kernels/fp8_kv_cache.py",
     "/harness/trainer/README.md",
     "/harness/trainer/export_qwen38_mtp.py",
     "/scripts/*.command",
     "/tests/test_dflash_engine_config.py",
+    "/tests/test_embedded_runtime.py",
+    "/tests/test_fp8_kv_cache.py",
+    "/tests/test_fused_mtp_kernel_integration.py",
     "/tests/test_model_provenance.py",
     "/tests/test_mtp_artifact.py",
     "/tests/test_qwen38_mtp.py",
     "/tests/test_qwen_chat_format.py",
     "/tests/test_qwen_prime_runtime_identity.py",
     "/tests/test_runtime_cli.py",
+    "/tests/test_stream_sanitizer.py",
     "/tests/test_stream_stats.py",
+    "/tests/test_tool_stream_contract.py",
 ]
 
 [project.scripts]

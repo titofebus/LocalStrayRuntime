@@ -97,11 +97,14 @@ ditto "$PYTHON_ROOT" "$PAYLOAD/python"
 echo "Installing the locked runtime environment..."
 uv export --project "$PROJECT_DIR" --frozen --no-dev --no-editable --no-hashes \
     --output-file "$BUILD_DIR/requirements.txt"
-uv pip install \
-    --python "$PAYLOAD/python/bin/python3.12" \
-    --target "$PAYLOAD/site-packages" \
-    --refresh-package qwen-prime-runtime \
-    --requirements "$BUILD_DIR/requirements.txt"
+(
+    cd "$PROJECT_DIR"
+    uv pip install \
+        --python "$PAYLOAD/python/bin/python3.12" \
+        --target "$PAYLOAD/site-packages" \
+        --refresh-package qwen-prime-runtime \
+        --requirements "$BUILD_DIR/requirements.txt"
+)
 
 find "$PAYLOAD" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "$PAYLOAD" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete

@@ -1,3 +1,83 @@
+"""Stream filtering, sanitization, and structured tool-call extraction."""
+from __future__ import annotations
+
+import json
+import re
+from typing import Any, Dict, List, Optional, Tuple
+import uuid
+
+STRUCTURED_TOOL_CALLS_V1 = "structured_tool_calls_v1"
+MALFORMED_TOOL_CALL_MARKER = "[Malformed tool call omitted]"
+
+
+def should_use_prefix_cache(tools: Any) -> bool:
+    """Tool schemas alter the rendered prompt but are absent from the message cache key."""
+    return not bool(tools)
+
+
+def extract_tool_calls(text: str) -> Tuple[str, List[Dict[str, Any]]]:
+    """Extract <tool_call> JSON blocks into structured tool calls and clean text."""
+    if not text:
+        return "", []
+
+    tool_calls: List[Dict[str, Any]] = []
+
+    def _replace_tool_call(match: re.Match) -> str:
+        raw_content = match.group(1).strip()
+        if not raw_content:
+            return MALFORMED_TOOL_CALL_MARKER
+        try:
+            call_obj = json.loads(raw_content)
+            if not isinstance(call_obj, dict):
+                return MALFORMED_TOOL_CALL_MARKER
+            name = call_obj.get("name")
+            if not name or not isinstance(name, str):
+                return MALFORMED_TOOL_CALL_MARKER
+            args = call_obj.get("arguments", {})
+            if isinstance(args, (dict, list)):
+                args_str = json.dumps(args)
+            elif isinstance(args, str):
+                args_str = args
+            else:
+                args_str = json.dumps(args)
+
+            tool_calls.append({
+                "id": f"call_{uuid.uuid4().hex[:8]}",
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": args_str,
+                },
+            })
+            return ""
+        except Exception:
+            return MALFORMED_TOOL_CALL_MARKER
+
+    clean_text = re.sub(
+        r"<tool_call>\s*(.*?)\s*</tool_call>",
+        _replace_tool_call,
+        text,
+        flags=re.DOTALL,
+    )
+
+    if "<tool_call>" in clean_text:
+        clean_text = re.sub(
+            r"<tool_call>.*$",
+            MALFORMED_TOOL_CALL_MARKER,
+            clean_text,
+            flags=re.DOTALL,
+        )
+
+    clean_text = clean_text.replace("</tool_call>", "").replace("<tool_call>", "")
+
+    if not clean_text.strip():
+        clean_text = ""
+    else:
+        clean_text = clean_text.strip()
+
+    return clean_text, tool_calls
+
+
 class ControlTokenFilter:
     _MARKERS = ("<|im_end|>", "<|endoftext|>", "<|im_start|>")
 

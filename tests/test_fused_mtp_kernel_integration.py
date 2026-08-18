@@ -1,12 +1,18 @@
 """Integration test comparing standard Qwen3.8 MTP predict_block vs Fused Metal Shaders."""
-import pytest
 import inspect
 from types import SimpleNamespace
+import pytest
 import mlx.core as mx
+
+try:
+    mx.eval(mx.zeros((1,)))
+except RuntimeError:
+    pytest.skip("Metal device not available in environment", allow_module_level=True)
+
 import mlx.nn as nn
-from harness.executors.qwen38_mtp import Qwen38MTPModel
-from harness.kernels.sandbox.fused_mtp_ops import fused_dual_rmsnorm_concat, fast_vocab_argmax
 from dflash_mlx.engine.sampling import greedy_tokens_with_mask
+from harness.executors.qwen38_mtp import Qwen38MTPModel
+from harness.kernels.fused_mtp_ops import fast_vocab_argmax, fused_dual_rmsnorm_concat
 
 
 @pytest.fixture
@@ -45,8 +51,8 @@ class MockTargetOps:
 
 def test_fused_metal_vs_standard_mtp_block_prediction(mtp_config):
     """Verify that fused Metal kernels produce matching tokens on Qwen 3.8 MTP draft block."""
-    mtp_model = Qwen38MTPModel(mtp_config)
-    
+    mtp_model = Qwen38MTPModel(mtp_config, fused_mtp=True)
+
     # Cast all parameters to float16 (exact production model state)
     for p in mtp_model.parameters().values():
         if isinstance(p, mx.array):

@@ -73,3 +73,10 @@ def test_embedded_launcher_resolves_python_relative_to_moved_payload(tmp_path: P
     assert str(payload) not in result.stdout
     launcher = (moved / "bin" / "qwen-prime-runtime").read_text(encoding="utf-8")
     assert "PYTHONDONTWRITEBYTECODE=1" in launcher
+
+
+def test_source_distribution_excludes_recovery_sandbox_artifacts():
+    project = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert '"/tests/test_sandbox.py"' not in project
+    assert '"/harness/kernels/sandbox/' not in project
