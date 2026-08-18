@@ -61,3 +61,19 @@ def test_generation_limits_are_bounded_and_honor_client_values():
         "max_tokens": 99999,
         "max_reasoning_tokens": 99999,
     }) == (4096, 256)
+
+
+def test_tool_schema_json_is_stable_across_dictionary_key_order():
+    qwen_chat = _load_qwen_chat()
+    first = [{
+        "type": "function",
+        "function": {"name": "read", "description": "Read a file"},
+    }]
+    reordered = [{
+        "function": {"description": "Read a file", "name": "read"},
+        "type": "function",
+    }]
+
+    assert qwen_chat.canonical_tool_schema_json(first) == (
+        qwen_chat.canonical_tool_schema_json(reordered)
+    )

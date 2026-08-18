@@ -16,6 +16,7 @@ from harness.executors.dflash_engine import DFlashEngine
 from harness.daemon.stream_stats import combine_generation_usage
 from harness.daemon.stream_sanitizer import ControlTokenFilter, ToolMarkupFilter, extract_tool_calls, should_use_prefix_cache, STRUCTURED_TOOL_CALLS_V1
 from harness.daemon.qwen_chat import (
+    canonical_tool_schema_json,
     format_assistant_turn,
     generation_limits,
     runtime_reasoning_policy,
@@ -130,7 +131,7 @@ def format_messages_to_qwen_chat(
     tools_section = ""
     mode_policy = runtime_reasoning_policy(enable_thinking, max_reasoning_tokens)
     if tools:
-        tools_json = json.dumps(tools, indent=2)
+        tools_json = canonical_tool_schema_json(tools)
         tools_section = (
             "\n\n# Tools\n"
             "You may call one or more functions to assist with the user query.\n"

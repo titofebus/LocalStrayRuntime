@@ -11,8 +11,9 @@ MALFORMED_TOOL_CALL_MARKER = "[Malformed tool call omitted]"
 
 
 def should_use_prefix_cache(tools: Any) -> bool:
-    """Tool schemas alter the rendered prompt but are absent from the message cache key."""
-    return not bool(tools)
+    """Use token-prefix caching; rendered tool schemas participate in cache matching."""
+    _ = tools
+    return True
 
 
 def extract_tool_calls(text: str) -> Tuple[str, List[Dict[str, Any]]]:

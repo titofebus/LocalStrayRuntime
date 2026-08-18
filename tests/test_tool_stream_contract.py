@@ -14,10 +14,10 @@ def test_capability_identity_constant():
     assert STRUCTURED_TOOL_CALLS_V1 == "structured_tool_calls_v1"
 
 
-def test_tool_requests_bypass_prefix_cache_because_schema_is_part_of_prompt():
+def test_tool_requests_use_rendered_prompt_prefix_cache():
     assert should_use_prefix_cache(None) is True
     assert should_use_prefix_cache([]) is True
-    assert should_use_prefix_cache([{"type": "function"}]) is False
+    assert should_use_prefix_cache([{"type": "function"}]) is True
 
 
 def test_stream_filter_extracts_structured_tool_call_without_raw_xml():
