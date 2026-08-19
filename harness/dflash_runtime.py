@@ -1,6 +1,29 @@
 import os
 
 
+def agent_cache_prompt_tokens(
+    tokens: list[int],
+    *,
+    messages: list[dict] | None,
+    im_start_id: int | None,
+    assistant_id: int | None,
+    boundary_offset: int,
+) -> list[int]:
+    if (
+        not messages
+        or not any(message.get("role") == "tool" for message in messages)
+        or im_start_id is None
+        or assistant_id is None
+    ):
+        return tokens
+
+    offset = max(0, int(boundary_offset))
+    for index in range(len(tokens) - 1):
+        if tokens[index] == im_start_id and tokens[index + 1] == assistant_id:
+            return tokens[: min(len(tokens), index + offset)]
+    return tokens
+
+
 def initialize_mlx_streams() -> None:
     """Initialize thread-local MLX streams before entering DFlash internals."""
     import mlx.core as mx

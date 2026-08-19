@@ -65,6 +65,18 @@ def test_production_runtime_uses_measured_adaptive_mode_and_native_prefix_cache(
     assert runtime.verify_mode == "adaptive"
 
 
+def test_dflash_dependency_supports_shorter_prompt_sidecar_reuse():
+    from importlib.metadata import distribution, version
+
+    assert version("dflash-mlx") == "0.1.10"
+    package = distribution("dflash-mlx")
+    prefix_cache_source = package.locate_file(
+        "dflash_mlx/cache/prefix_l1.py"
+    ).read_text(encoding="utf-8")
+    assert "slice_snapshot_at_sidecar_boundary" in prefix_cache_source
+    assert "sidecar_hits" in prefix_cache_source
+
+
 def test_ddtree_can_be_enabled_explicitly_for_benchmarking(monkeypatch):
     monkeypatch.setenv("QWEN_PRIME_VERIFY_MODE", "ddtree")
 
@@ -91,6 +103,48 @@ def test_stream_generation_uses_dflash_prefix_snapshots_and_prefill_events():
     assert "snapshot_service=prefix_flow.snapshot_service" in source
     assert "prefix_cache_active=prefix_flow.cache_active" in source
     assert "PrefillCompleteEvent" in source
+
+
+def test_prefix_cache_provider_exposes_dflash_010_target_context():
+    source_path = (
+        Path(__file__).parents[1] / "harness" / "executors" / "dflash_engine.py"
+    )
+    source = source_path.read_text(encoding="utf-8")
+
+    assert "model=bundle.target_model" in source
+    assert "target_ops=bundle.target_ops" in source
+    assert "max_new_tokens=max_new_tokens" in source
+    assert "prefix_flow.publish_generation_snapshot = False" in source
+    assert (
+        "publish_generation_snapshot=prefix_flow.publish_generation_snapshot"
+        in source
+    )
+    assert "prefix_hit_kind=prefix_flow.hit_kind" in source
+
+
+def test_agent_tool_continuations_reuse_the_first_assistant_boundary():
+    tokens = [10, 11, 100, 200, 12, 13, 100, 200, 14]
+    messages = [
+        {"role": "system", "content": "rules"},
+        {"role": "user", "content": "inspect"},
+        {"role": "assistant", "content": "tool call"},
+        {"role": "tool", "content": "result"},
+    ]
+
+    assert dflash_runtime.agent_cache_prompt_tokens(
+        tokens,
+        messages=messages,
+        im_start_id=100,
+        assistant_id=200,
+        boundary_offset=0,
+    ) == [10, 11]
+    assert dflash_runtime.agent_cache_prompt_tokens(
+        tokens,
+        messages=messages[:2],
+        im_start_id=100,
+        assistant_id=200,
+        boundary_offset=0,
+    ) == tokens
 
 
 def test_unified_server_finishes_metal_warmup_before_becoming_ready():

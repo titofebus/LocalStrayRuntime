@@ -77,3 +77,16 @@ def test_tool_schema_json_is_stable_across_dictionary_key_order():
     assert qwen_chat.canonical_tool_schema_json(first) == (
         qwen_chat.canonical_tool_schema_json(reordered)
     )
+
+
+def test_prompt_fingerprint_is_stable_without_exposing_prompt_text():
+    qwen_chat = _load_qwen_chat()
+
+    first = qwen_chat.prompt_fingerprint("private prompt")
+    repeated = qwen_chat.prompt_fingerprint("private prompt")
+    changed = qwen_chat.prompt_fingerprint("different prompt")
+
+    assert first == repeated
+    assert first != changed
+    assert "private" not in first
+    assert len(first) == 16

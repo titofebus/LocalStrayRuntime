@@ -71,14 +71,11 @@ wheels = [
 
 [[package]]
 name = "dflash-mlx"
-version = "0.1.8"
-source = { registry = "https://pypi.org/simple" }
+version = "0.1.10"
+source = { git = "https://github.com/bstnxbt/dflash-mlx.git?tag=v0.1.10#9ca002898b48e14c9727dec17299f497e8467870" }
 dependencies = [
     { name = "mlx" },
     { name = "mlx-lm" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5d/2a/fc00e5e849327356eee32dfff3f35a619db5388905204cb1383239b88a17/dflash_mlx-0.1.8-py3-none-any.whl", hash = "sha256:639eb6f92de40405a42784d080b1c5b36d0f175d514314e1671c09e30e309f9c", size = 189715, upload-time = "2026-05-31T09:13:09.579Z" },
 ]
 
 [[package]]
@@ -923,7 +920,7 @@ training = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dflash-mlx", specifier = "==0.1.8" },
+    { name = "dflash-mlx", git = "https://github.com/bstnxbt/dflash-mlx.git?tag=v0.1.10" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "mlx", specifier = "==0.32.0" },
     { name = "mlx-lm", specifier = "==0.31.3" },

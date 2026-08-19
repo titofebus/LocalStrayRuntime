@@ -19,6 +19,7 @@ from harness.daemon.qwen_chat import (
     canonical_tool_schema_json,
     format_assistant_turn,
     generation_limits,
+    prompt_fingerprint,
     runtime_reasoning_policy,
 )
 from harness.model_provenance import qwen_prime_runtime_identity
@@ -255,7 +256,8 @@ async def chat_completions(request: Request):
     print(
         f"[UnifiedServer] Request mode={mode_name}, "
         f"max_completion_tokens={max_tokens}, "
-        f"max_reasoning_tokens={max_reasoning_tokens}, messages={len(messages)}",
+        f"max_reasoning_tokens={max_reasoning_tokens}, messages={len(messages)}, "
+        f"prompt_chars={len(prompt)}, prompt_fingerprint={prompt_fingerprint(prompt)}",
         flush=True,
     )
 

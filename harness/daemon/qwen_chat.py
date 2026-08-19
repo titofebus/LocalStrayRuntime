@@ -1,9 +1,14 @@
+import hashlib
 import json
 from typing import Any, Mapping
 
 
 def canonical_tool_schema_json(tools: Any) -> str:
     return json.dumps(tools, indent=2, sort_keys=True)
+
+
+def prompt_fingerprint(prompt: str) -> str:
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16]
 
 
 def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:

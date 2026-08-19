@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 dependencies = [
-    "dflash-mlx==0.1.8",
+    "dflash-mlx==0.1.10",
     "mlx==0.32.0",
     "mlx-lm==0.31.3",
     "rich>=13.7.0",
@@ -26,6 +26,9 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv.sources]
+dflash-mlx = { git = "https://github.com/bstnxbt/dflash-mlx.git", tag = "v0.1.10" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["harness"]

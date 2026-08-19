@@ -10,7 +10,11 @@ import mlx.core as mx
 from harness.config import DEFAULT_MLX_MODEL_PATH, DEFAULT_MTP_MODEL_PATH, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
 from harness.core.models import ModelOutput, Challenge, VerificationResult
 from harness.daemon.stream_stats import generation_usage
-from harness.dflash_runtime import build_dflash_runtime_context, initialize_mlx_streams
+from harness.dflash_runtime import (
+    agent_cache_prompt_tokens,
+    build_dflash_runtime_context,
+    initialize_mlx_streams,
+)
 
 DEFAULT_DFLASH_DRAFT_REF = DEFAULT_MTP_MODEL_PATH
 
@@ -160,12 +164,16 @@ class DFlashEngine:
         *,
         prompt_tokens: list[int],
         messages: Optional[list[dict[str, Any]]],
+        max_new_tokens: int,
     ):
         from dflash_mlx.server.prefix_cache_flow import PrefixCacheFlow
+        from dflash_mlx.server.prefix_cache_manager import chat_template_stable_marker
 
         bundle = DFlashEngine._bundle
         provider = SimpleNamespace(
             model_key=(self.target_path, None, self.draft_ref),
+            model=bundle.target_model,
+            target_ops=bundle.target_ops,
             tokenizer=bundle.tokenizer,
             cli_args=SimpleNamespace(chat_template_args={}),
         )
@@ -174,14 +182,29 @@ class DFlashEngine:
             if messages
             else None
         )
-        return PrefixCacheFlow.for_request(
+        im_start_id, assistant_id, boundary_offset = chat_template_stable_marker(
+            bundle.tokenizer
+        )
+        cache_prompt_tokens = agent_cache_prompt_tokens(
+            prompt_tokens,
+            messages=messages,
+            im_start_id=im_start_id,
+            assistant_id=assistant_id,
+            boundary_offset=boundary_offset,
+        )
+        prefix_flow = PrefixCacheFlow.for_request(
             model_provider=provider,
             draft_model=bundle.draft_model,
             tokenizer=bundle.tokenizer,
-            prompt=prompt_tokens,
+            prompt=cache_prompt_tokens,
             request=request,
+            max_new_tokens=max_new_tokens,
             runtime_context=DFlashEngine._runtime_context,
         )
+        # ponytail: Qwen3.8's hybrid cache cannot carry DFlash generation
+        # sidecars; retain the stable prefill snapshot instead.
+        prefix_flow.publish_generation_snapshot = False
+        return prefix_flow
 
     def run_inference(
         self,
@@ -373,6 +396,7 @@ class DFlashEngine:
             prefix_flow = self._prefix_cache_flow(
                 prompt_tokens=encoded_prompt,
                 messages=messages,
+                max_new_tokens=max_tokens,
             )
         prefill_payload = None
 
@@ -410,6 +434,8 @@ class DFlashEngine:
                 snapshot_service=prefix_flow.snapshot_service,
                 stable_prefix_len=prefix_flow.stable_prefix_len,
                 prefix_cache_active=prefix_flow.cache_active,
+                publish_generation_snapshot=prefix_flow.publish_generation_snapshot,
+                prefix_hit_kind=prefix_flow.hit_kind,
                 runtime_context=runtime_context,
             )
 
