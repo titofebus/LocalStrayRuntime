@@ -58,6 +58,8 @@ def test_production_runtime_uses_measured_adaptive_mode_and_native_prefix_cache(
     runtime = build_context().runtime
 
     assert runtime.prefix_cache is True
+    assert runtime.prefix_cache_max_entries == 2
+    assert runtime.prefix_cache_max_bytes == 2 * 1024 * 1024 * 1024
     assert runtime.prefix_cache_l2 is False
     assert runtime.target_fa_window == 0
     assert runtime.verify_mode == "adaptive"

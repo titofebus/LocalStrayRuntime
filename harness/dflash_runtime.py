@@ -27,6 +27,8 @@ def build_dflash_runtime_context():
     return build_runtime_context(
         runtime_config_from_defaults(
             prefix_cache=True,
+            prefix_cache_max_entries=2,
+            prefix_cache_max_bytes=2 * 1024 * 1024 * 1024,
             prefix_cache_l2=False,
             target_fa_window=0,
             verify_len_cap=0,
