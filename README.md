@@ -1,9 +1,9 @@
 # Qwen Prime Runtime
 
 Qwen Prime Runtime is a local, OpenAI-compatible inference server for the
-official Qwen3.8-27B model on Apple Silicon. It pairs a 6-bit MLX target with
-the matching 6-bit native MTP head and uses DFlash verification with a default
-four-token speculative block.
+official Qwen3.8-27B model on Apple Silicon. The recommended configuration pairs
+a hybrid Q8/Q4 MLX target with the matching 6-bit native MTP head and uses
+DFlash verification with a default four-token speculative block.
 
 The runtime, macOS client, Prime Agent integration, and model weights are
 separate release units. Model weights are not bundled with this repository.
@@ -15,7 +15,13 @@ separate release units. Model weights are not bundled with this repository.
 - Python 3.12 recommended
 - Approximately 24 GB of available unified memory for the current target and
   draft pair
-- A 6-bit Qwen3.8-27B MLX target and its matching native-MTP artifact
+- The hybrid Q8/Q4 Qwen3.8-27B MLX target and its matching native-MTP artifact
+
+## Model downloads
+
+- Recommended target: [`adrianmurray/Qwen3.8-27B-Hybrid-Q8Q4`](https://huggingface.co/adrianmurray/Qwen3.8-27B-Hybrid-Q8Q4)
+- Matching native-MTP draft: [`adrianmurray/Qwen3.8-27B-MTP-MLX-6bit`](https://huggingface.co/adrianmurray/Qwen3.8-27B-MTP-MLX-6bit)
+- Optional uniform baseline: [`adrianmurray/Qwen3.8-27B-MLX-6bit`](https://huggingface.co/adrianmurray/Qwen3.8-27B-MLX-6bit)
 
 ## Install from source
 
@@ -29,7 +35,7 @@ Configure model locations without editing source files:
 
 ```bash
 qwen-prime-runtime configure \
-  --target "/path/to/Qwen3.8-27B-MLX-6bit" \
+  --target "/path/to/Qwen3.8-27B-Hybrid-Q8Q4" \
   --draft "/path/to/Qwen3.8-27B-MTP-MLX-6bit"
 
 qwen-prime-runtime doctor
@@ -91,10 +97,12 @@ quantized.
 ## Performance
 
 Performance depends on hardware, prompt length, cache state, generation length,
-and draft acceptance. On the development M4 Max, a warm 256-token coding test
-measured approximately 26 server tokens/second with 53.9% draft acceptance. A
-direct block-size sweep measured approximately 28 tokens/second at block size
-four. These are measurements, not guaranteed minimums.
+and draft acceptance. On the development M4 Max, the downloaded Qwen Prime 1.1.1
+application measured 29.38 server tokens/second with 55.9% draft acceptance on
+a 256-token Swift task using the hybrid target. A smaller deterministic Swift 6
+task generated 88 tokens at 33.85 server tokens/second with 59.1% acceptance;
+the result compiled and passed its functional assertions. These are
+single-machine measurements, not guaranteed minimums.
 
 Time to first model token must be measured from the first non-empty generation
 delta. The initial empty SSE role event is connection metadata and is not a
