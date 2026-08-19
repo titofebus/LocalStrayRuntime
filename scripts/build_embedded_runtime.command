@@ -113,7 +113,7 @@ write_launcher "$PAYLOAD"
 cat > "$PAYLOAD/runtime-build.json" <<EOF
 {
   "runtime": "qwen-prime-runtime",
-  "runtime_version": "0.1.0",
+  "runtime_version": "0.1.1",
   "python": "3.12",
   "platform": "macos-arm64",
   "uv_lock_sha256": "$(shasum -a 256 "$PROJECT_DIR/uv.lock" | awk '{print $1}')"

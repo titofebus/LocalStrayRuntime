@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -36,6 +37,15 @@ def test_embedded_runtime_builder_refreshes_local_runtime_wheel():
     source = BUILDER.read_text(encoding="utf-8")
 
     assert "--refresh-package qwen-prime-runtime" in source
+
+
+def test_embedded_runtime_metadata_matches_package_version():
+    project = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    source = BUILDER.read_text(encoding="utf-8")
+    package_version = re.search(r'^version = "([^"]+)"$', project, re.MULTILINE)
+
+    assert package_version is not None
+    assert f'"runtime_version": "{package_version.group(1)}"' in source
 
 
 def test_embedded_launcher_resolves_python_relative_to_moved_payload(tmp_path: Path):

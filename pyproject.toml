@@ -1,6 +1,6 @@
 [project]
 name = "qwen-prime-runtime"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local Qwen3.8-27B MLX runtime with native-MTP speculative decoding"
 readme = "README.md"
 requires-python = ">=3.10"
